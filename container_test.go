@@ -6,7 +6,7 @@ import (
 )
 
 func TestContainer_Get(t *testing.T) {
-	newA := func(cb *ContainerBuilder) int {
+	newA := func(cb *containerBuilder) int {
 		return 1
 	}
 
@@ -21,7 +21,7 @@ func TestContainer_Get(t *testing.T) {
 
 func TestContainer_Get_SharedService(t *testing.T) {
 	spy := 0
-	newA := func(cb *ContainerBuilder) int {
+	newA := func(cb *containerBuilder) int {
 		spy++
 		return spy
 	}

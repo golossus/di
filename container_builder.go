@@ -25,19 +25,32 @@ func (d *Definition) Private() bool {
 }
 
 type Provider interface {
-	Register(builder *ContainerBuilder)
-	Resolve(builder *ContainerBuilder)
+	Register(builder ContainerBuilderInterface)
+	Resolve(builder ContainerBuilderInterface)
 }
 
-type ContainerBuilder struct {
+type ContainerBuilderInterface interface {
+	SetParameter(key string, param interface{})
+	HasParameter(key string) bool
+	GetParameter(key string) interface{}
+	SetDefinition(key string, build interface{})
+	HasDefinition(key string) bool
+	GetDefinition(key string) *Definition
+	SetAlias(key, def string)
+	HasAlias(key string) bool
+	GetAlias(key string) string
+	AddProviders(p ...Provider)
+}
+
+type containerBuilder struct {
 	params, defs, alias *itemHash
 	providers           []Provider
 	parser              *keyParser
 	resolved            bool
 }
 
-func NewContainerBuilder() *ContainerBuilder {
-	return &ContainerBuilder{
+func NewContainerBuilder() *containerBuilder {
+	return &containerBuilder{
 		params:    newItemHash(),
 		defs:      newItemHash(),
 		alias:     newItemHash(),
@@ -49,7 +62,7 @@ func NewContainerBuilder() *ContainerBuilder {
 
 // Parameters:
 
-func (c *ContainerBuilder) SetParameter(key string, param interface{}) {
+func (c *containerBuilder) SetParameter(key string, param interface{}) {
 	mustBeUnresolved(c)
 	mustJsonMarshal(param)
 
@@ -58,17 +71,17 @@ func (c *ContainerBuilder) SetParameter(key string, param interface{}) {
 	c.params.set(k, param)
 }
 
-func (c *ContainerBuilder) HasParameter(key string) bool {
+func (c *containerBuilder) HasParameter(key string) bool {
 	return c.params.has(key)
 }
 
-func (c *ContainerBuilder) GetParameter(key string) interface{} {
+func (c *containerBuilder) GetParameter(key string) interface{} {
 	return c.params.get(key)
 }
 
 // Definitions:
 
-func (c *ContainerBuilder) SetDefinition(key string, build interface{}) {
+func (c *containerBuilder) SetDefinition(key string, build interface{}) {
 	mustBeUnresolved(c)
 	mustBeValidConstructor(build)
 
@@ -81,7 +94,7 @@ func (c *ContainerBuilder) SetDefinition(key string, build interface{}) {
 	})
 }
 
-func (c *ContainerBuilder) HasDefinition(key string) bool {
+func (c *containerBuilder) HasDefinition(key string) bool {
 	if c.alias.has(key) {
 		key = c.alias.get(key).(string)
 	}
@@ -89,7 +102,7 @@ func (c *ContainerBuilder) HasDefinition(key string) bool {
 	return c.defs.has(key)
 }
 
-func (c *ContainerBuilder) GetDefinition(key string) *Definition {
+func (c *containerBuilder) GetDefinition(key string) *Definition {
 	if c.alias.has(key) {
 		key = c.alias.get(key).(string)
 	}
@@ -99,35 +112,37 @@ func (c *ContainerBuilder) GetDefinition(key string) *Definition {
 
 // Aliases:
 
-func (c *ContainerBuilder) SetAlias(key, def string) {
+func (c *containerBuilder) SetAlias(key, def string) {
 	mustBeUnresolved(c)
 
-	if c.defs.has(key) {
-		panic(fmt.Sprintf("definition with id '%s' already exists and alias cannot be set", key))
-	}
+	k, _ := c.parser.parse(key)
 
 	if !c.defs.has(def) {
 		panic(fmt.Sprintf("definition with id '%s' does not exist and alias cannot be set", def))
 	}
 
-	c.alias.set(key, def)
+	if c.defs.has(k) {
+		panic(fmt.Sprintf("definition with id '%s' already exists and alias cannot be set", key))
+	}
+
+	c.alias.set(k, def)
 }
 
-func (c *ContainerBuilder) HasAlias(key string) bool {
+func (c *containerBuilder) HasAlias(key string) bool {
 	return c.alias.has(key)
 }
 
-func (c *ContainerBuilder) GetAlias(key string) string {
+func (c *containerBuilder) GetAlias(key string) string {
 	return c.alias.get(key).(string)
 }
 
 // Providers
 
-func (c *ContainerBuilder) AddProviders(p ...Provider) {
+func (c *containerBuilder) AddProviders(p ...Provider) {
 	c.providers = append(c.providers, p...)
 }
 
-func (c *ContainerBuilder) GetContainer() Container {
+func (c *containerBuilder) GetContainer() Container {
 	//This should be protected about concurrency
 	if c.resolved {
 		return newContainer(c)
@@ -146,7 +161,7 @@ func (c *ContainerBuilder) GetContainer() Container {
 	return newContainer(c)
 }
 
-func mustBeUnresolved(c *ContainerBuilder) {
+func mustBeUnresolved(c *containerBuilder) {
 	if c.resolved {
 		panic("container is resolved and new items can not be set")
 	}
@@ -159,19 +174,24 @@ func mustJsonMarshal(param interface{}) {
 	}
 }
 
-var cbType = reflect.TypeOf(&ContainerBuilder{})
+var cbType = reflect.TypeOf((*ContainerBuilderInterface)(nil)).Elem()
 
 func mustBeValidConstructor(build interface{}) {
 	t := reflect.TypeOf(build)
 
 	if t.Kind() != reflect.Func {
-		panic(fmt.Sprintf("invalid constructor kind '%s'", t.Kind()))
+		panic(fmt.Sprintf("invalid constructor kind '%T', must be a function", build))
 	}
 
 	if t.NumOut() != 1 {
-		panic(fmt.Sprintf("constructor for type '%s' should return a single value", t.Name()))
+		panic(fmt.Sprintf("constructor '%T' should return a single value", build))
 	}
-	if t.NumIn() != 1 || t.In(0) != cbType {
-		panic(fmt.Sprintf("constructor for type '%s' should only receive a container builder instance", t.Name()))
+
+	if t.NumIn() == 0 {
+		return
+	}
+
+	if t.NumIn() > 1 || !t.In(0).Implements(cbType) {
+		panic(fmt.Sprintf("constructor '%T' can only receive a '%s' argument", build, cbType.Name()))
 	}
 }

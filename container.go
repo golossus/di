@@ -6,11 +6,11 @@ import (
 )
 
 type Container struct {
-	builder   *ContainerBuilder
+	builder   *containerBuilder
 	instances *itemHash
 }
 
-func newContainer(builder *ContainerBuilder) Container {
+func newContainer(builder *containerBuilder) Container {
 	return Container{
 		builder:   builder,
 		instances: newItemHash(),
