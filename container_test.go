@@ -70,19 +70,27 @@ func TestContainer_Get_CanCreateWithDefinitionDependencyConstructor(t *testing.T
 
 func TestContainer_Get_CreatesSingleInstanceForSharedService(t *testing.T) {
 	spy := 0
-	newA := func(cb Container) int {
+	shared := func(cb Container) int {
 		spy++
 		return spy
 	}
 
+	other := func(cb Container) int {
+		return cb.Get("shared").(int)
+	}
+
 	b := NewContainerBuilder()
-	b.SetDefinition("a #shared", newA)
+	b.SetDefinition("shared #shared", shared)
+	b.SetDefinition("other", other)
 	c := b.GetContainer()
 
-	r1 := c.Get("a").(int)
-	r2 := c.Get("a").(int)
+	r1 := c.Get("shared").(int)
+	r2 := c.Get("shared").(int)
+	r3 := c.Get("other").(int)
 
-	assert.Equal(t, r1, r2)
+	assert.Equal(t, 1, r1)
+	assert.Equal(t, 1, r2)
+	assert.Equal(t, 1, r3)
 }
 
 func TestContainer_Get_CreatesNewInstancesForNotSharedService(t *testing.T) {
@@ -143,4 +151,20 @@ func TestContainer_Get_CanCreateWithPrivateDependency(t *testing.T) {
 	r := c.Get("public").(int)
 
 	assert.Equal(t, 3, r)
+}
+
+func TestContainer_Get_PanicsIfCircularReference(t *testing.T) {
+	s1 := func(cb Container) int { return cb.Get("s2").(int) }
+	s2 := func(cb Container) int { return cb.Get("s3").(int) }
+	s3 := func(cb Container) int { return cb.Get("s1").(int) }
+
+	b := NewContainerBuilder()
+	b.SetDefinition("s1", s1)
+	b.SetDefinition("s2", s2)
+	b.SetDefinition("s3", s3)
+	c := b.GetContainer()
+
+	assert.PanicsWithValue(t, "circular reference found while building service 's1' at service 's3'", func() {
+		_ = c.Get("s1")
+	})
 }
