@@ -29,11 +29,6 @@ type Provider interface {
 	Resolve(builder ContainerBuilder)
 }
 
-type Container interface {
-	Get(key string) interface{}
-	GetParameter(key string) interface{}
-}
-
 type ContainerBuilder interface {
 	SetParameter(key string, param interface{})
 	HasParameter(key string) bool
@@ -166,6 +161,7 @@ func (c *containerBuilder) GetContainer() *container {
 	return &container{
 		builder:   c,
 		instances: newItemHash(),
+		sealed: true,
 	}
 }
 

@@ -120,3 +120,27 @@ func TestContainer_Get_PanicsIfRequestingPrivateService(t *testing.T) {
 		_ = c.Get("a").(int)
 	})
 }
+
+func TestContainer_Get_CanCreateWithPrivateDependency(t *testing.T) {
+	public := func(cb Container) int {
+		return cb.Get("public2").(int) + 1
+	}
+
+	public2 := func(cb Container) int {
+		return cb.Get("private").(int) + 1
+	}
+
+	private := func() int {
+		return 1
+	}
+
+	b := NewContainerBuilder()
+	b.SetDefinition("public", public)
+	b.SetDefinition("public2", public2)
+	b.SetDefinition("private #private", private)
+	c := b.GetContainer()
+
+	r := c.Get("public").(int)
+
+	assert.Equal(t, 3, r)
+}
