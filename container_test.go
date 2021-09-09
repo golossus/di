@@ -19,8 +19,8 @@ func TestContainer_Get_CanCreateWithZeroArgumentsConstructor(t *testing.T) {
 	assert.Equal(t, 1, r)
 }
 
-func TestContainer_Get_CanCreateWithBuilderArgumentConstructor(t *testing.T) {
-	newOne := func(cb ContainerInterface) int {
+func TestContainer_Get_CanCreateWithContainerArgumentConstructor(t *testing.T) {
+	newOne := func(cb Container) int {
 		return 1
 	}
 
@@ -34,7 +34,7 @@ func TestContainer_Get_CanCreateWithBuilderArgumentConstructor(t *testing.T) {
 }
 
 func TestContainer_Get_CanCreateWithParameterDependencyConstructor(t *testing.T) {
-	newOne := func(cb ContainerInterface) int {
+	newOne := func(cb Container) int {
 		return cb.GetParameter("one").(int)
 	}
 
@@ -49,7 +49,7 @@ func TestContainer_Get_CanCreateWithParameterDependencyConstructor(t *testing.T)
 }
 
 func TestContainer_Get_CanCreateWithDefinitionDependencyConstructor(t *testing.T) {
-	newOne := func(cb ContainerInterface) int {
+	newOne := func(cb Container) int {
 		return cb.Get("two").(int) - 1
 	}
 
@@ -68,9 +68,9 @@ func TestContainer_Get_CanCreateWithDefinitionDependencyConstructor(t *testing.T
 	assert.Equal(t, 1, r)
 }
 
-func TestContainer_Get_SharedService(t *testing.T) {
+func TestContainer_Get_CreatesSingleInstanceForSharedService(t *testing.T) {
 	spy := 0
-	newA := func(cb ContainerInterface) int {
+	newA := func(cb Container) int {
 		spy++
 		return spy
 	}
@@ -83,4 +83,40 @@ func TestContainer_Get_SharedService(t *testing.T) {
 	r2 := c.Get("a").(int)
 
 	assert.Equal(t, r1, r2)
+}
+
+func TestContainer_Get_CreatesNewInstancesForNotSharedService(t *testing.T) {
+	spy := 0
+	newA := func(cb Container) int {
+		spy++
+		return spy
+	}
+
+	b := NewContainerBuilder()
+	b.SetDefinition("a", newA)
+	c := b.GetContainer()
+
+	r1 := c.Get("a").(int)
+	r2 := c.Get("a").(int)
+	r3 := c.Get("a").(int)
+
+	assert.Equal(t, 1, r1)
+	assert.Equal(t, 2, r2)
+	assert.Equal(t, 3, r3)
+}
+
+func TestContainer_Get_PanicsIfRequestingPrivateService(t *testing.T) {
+	spy := 0
+	newA := func(cb Container) int {
+		spy++
+		return spy
+	}
+
+	b := NewContainerBuilder()
+	b.SetDefinition("a #private", newA)
+	c := b.GetContainer()
+
+	assert.PanicsWithValue(t, "service with key 'a' is private and can't be retrieved from the container", func() {
+		_ = c.Get("a").(int)
+	})
 }

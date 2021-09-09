@@ -10,10 +10,6 @@ type container struct {
 	instances *itemHash
 }
 
-func (c *container) Has(key string) bool {
-	return c.builder.HasDefinition(key)
-}
-
 func (c *container) Get(key string) interface{} {
 	def := c.builder.GetDefinition(key)
 	if def.Private() {
@@ -24,20 +20,16 @@ func (c *container) Get(key string) interface{} {
 		return c.instances.get(key)
 	}
 
-	c.instances.set(key, c.create(def))
+	c.instances.set(key, c.construct(def))
 
 	return c.instances.get(key)
-}
-
-func (c *container) HasParameter(key string) bool {
-	return c.builder.HasParameter(key)
 }
 
 func (c *container) GetParameter(key string) interface{} {
 	return c.builder.GetParameter(key)
 }
 
-func (c *container) create(def *Definition) interface{} {
+func (c *container) construct(def *Definition) interface{} {
 	args := []reflect.Value{}
 	if reflect.TypeOf(def.Build).NumIn() > 0{
 		args = append(args, reflect.ValueOf(c))

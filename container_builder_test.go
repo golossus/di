@@ -84,7 +84,7 @@ func TestContainerBuilder_SetDefinition_PanicsIfResolved(t *testing.T) {
 	b.resolved = true
 
 	key := "key1"
-	val := func(b ContainerInterface) int {
+	val := func(b Container) int {
 		return 1
 	}
 
@@ -129,7 +129,7 @@ func TestContainerBuilder_SetDefinition_PanicsIfInvalidConstructorArguments(t *t
 		return 1
 	}
 
-	assert.PanicsWithValue(t, "constructor 'func(int) int' can only receive a 'ContainerInterface' argument", func() {
+	assert.PanicsWithValue(t, "constructor 'func(int) int' can only receive a 'Container' argument", func() {
 		b.SetDefinition(key, val)
 	})
 }
@@ -137,14 +137,14 @@ func TestContainerBuilder_SetDefinition_PanicsIfInvalidConstructorArguments(t *t
 func TestContainerBuilder_SetDefinition_Success(t *testing.T) {
 	b := NewContainerBuilder()
 	key := "key1"
-	val := func(b ContainerInterface) int {
+	val := func(b Container) int {
 		return 1
 	}
 
 	b.SetDefinition(key, val)
 	assert.True(t, b.HasDefinition(key))
 
-	f, ok := b.GetDefinition(key).Build.(func(ContainerInterface) int)
+	f, ok := b.GetDefinition(key).Build.(func(Container) int)
 	assert.True(t, ok)
 	assert.Equal(t, val(&container{}), f(&container{}))
 }
@@ -168,7 +168,7 @@ func TestContainerBuilder_SetDefinition_RemovesAlias(t *testing.T) {
 	b := NewContainerBuilder()
 	alias := "alias"
 	key := "key"
-	val := func(b ContainerInterface) int {
+	val := func(b Container) int {
 		return 1
 	}
 
@@ -177,7 +177,7 @@ func TestContainerBuilder_SetDefinition_RemovesAlias(t *testing.T) {
 	assert.True(t, b.HasAlias(alias))
 	assert.True(t, b.HasDefinition(alias))
 
-	f, ok := b.GetDefinition(alias).Build.(func( ContainerInterface) int)
+	f, ok := b.GetDefinition(alias).Build.(func(Container) int)
 	assert.True(t, ok)
 	assert.Equal(t, val(&container{}), f(&container{}))
 
@@ -186,7 +186,7 @@ func TestContainerBuilder_SetDefinition_RemovesAlias(t *testing.T) {
 	assert.True(t, b.HasDefinition(alias))
 	assert.False(t, b.HasAlias(alias))
 
-	f, ok = b.GetDefinition(key).Build.(func( ContainerInterface) int)
+	f, ok = b.GetDefinition(key).Build.(func(Container) int)
 	assert.True(t, ok)
 	assert.Equal(t, val(&container{}), f(&container{}))
 }
@@ -194,7 +194,7 @@ func TestContainerBuilder_SetDefinition_RemovesAlias(t *testing.T) {
 func TestContainerBuilder_SetDefinition_SuccessWithTags(t *testing.T) {
 	b := NewContainerBuilder()
 	key := "key1 #private #shared #other"
-	val := func(b ContainerInterface) int {
+	val := func(b Container) int {
 		return 1
 	}
 
@@ -207,7 +207,7 @@ func TestContainerBuilder_SetDefinition_SuccessWithTags(t *testing.T) {
 	assert.True(t, d.Shared())
 	assert.True(t, d.Tags.has("other"))
 
-	f, ok := d.Build.(func(ContainerInterface) int)
+	f, ok := d.Build.(func(Container) int)
 	assert.True(t, ok)
 	assert.Equal(t, val(&container{}), f(&container{}))
 }
@@ -240,7 +240,7 @@ func TestContainerBuilder_SetAlias_PanicsIfServiceKeyAlreadyExists(t *testing.T)
 
 	key := "key1"
 	def := "key1"
-	val := func(b ContainerInterface) int {
+	val := func(b Container) int {
 		return 1
 	}
 	b.SetDefinition(def, val)
@@ -254,7 +254,7 @@ func TestContainerBuilder_SetAlias_Success(t *testing.T) {
 	b := NewContainerBuilder()
 	key := "key1"
 	alias := "alias1"
-	val := func(b ContainerInterface) int {
+	val := func(b Container) int {
 		return 1
 	}
 
@@ -266,8 +266,8 @@ func TestContainerBuilder_SetAlias_Success(t *testing.T) {
 	assert.False(t, b.HasAlias(key))
 	assert.Equal(t, b.GetAlias(alias), key)
 
-	d, okDef := b.GetDefinition(key).Build.(func(ContainerInterface) int)
-	a, okAlias := b.GetDefinition(alias).Build.(func(ContainerInterface) int)
+	d, okDef := b.GetDefinition(key).Build.(func(Container) int)
+	a, okAlias := b.GetDefinition(alias).Build.(func(Container) int)
 	assert.True(t, okDef)
 	assert.True(t, okAlias)
 	assert.Equal(t, d(&container{}), a(&container{}))
@@ -278,7 +278,7 @@ func TestContainerBuilder_SetAlias_IgnoresKeyTags(t *testing.T) {
 	key := "key1"
 	taggedAlias := "alias1 #tag1"
 	expectedAlias := "alias1"
-	val := func(b ContainerInterface) int {
+	val := func(b Container) int {
 		return 1
 	}
 
@@ -290,8 +290,8 @@ func TestContainerBuilder_SetAlias_IgnoresKeyTags(t *testing.T) {
 	assert.True(t, b.HasDefinition(expectedAlias))
 	assert.Equal(t, b.GetAlias(expectedAlias), key)
 
-	d, okDef := b.GetDefinition(key).Build.(func(ContainerInterface) int)
-	a, okAlias := b.GetDefinition(expectedAlias).Build.(func(ContainerInterface) int)
+	d, okDef := b.GetDefinition(key).Build.(func(Container) int)
+	a, okAlias := b.GetDefinition(expectedAlias).Build.(func(Container) int)
 	assert.True(t, okDef)
 	assert.True(t, okAlias)
 	assert.Equal(t, d(&container{}), a(&container{}))
@@ -302,11 +302,11 @@ type DummyProvider struct {
 	spyResolved   bool
 }
 
-func (p *DummyProvider) Register(b ContainerBuilderInterface) {
+func (p *DummyProvider) Register(b ContainerBuilder) {
 	p.spyRegistered = true
 }
 
-func (p *DummyProvider) Resolve(b ContainerBuilderInterface) {
+func (p *DummyProvider) Resolve(b ContainerBuilder) {
 	p.spyResolved = true
 }
 

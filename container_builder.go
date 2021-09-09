@@ -25,18 +25,16 @@ func (d *Definition) Private() bool {
 }
 
 type Provider interface {
-	Register(builder ContainerBuilderInterface)
-	Resolve(builder ContainerBuilderInterface)
+	Register(builder ContainerBuilder)
+	Resolve(builder ContainerBuilder)
 }
 
-type ContainerInterface interface {
-	Has(key string) bool
+type Container interface {
 	Get(key string) interface{}
-	HasParameter(key string) bool
 	GetParameter(key string) interface{}
 }
 
-type ContainerBuilderInterface interface {
+type ContainerBuilder interface {
 	SetParameter(key string, param interface{})
 	HasParameter(key string) bool
 	GetParameter(key string) interface{}
@@ -184,7 +182,7 @@ func mustJsonMarshal(param interface{}) {
 	}
 }
 
-var cbType = reflect.TypeOf((*ContainerInterface)(nil)).Elem()
+var cbType = reflect.TypeOf((*Container)(nil)).Elem()
 
 func mustBeValidConstructor(build interface{}) {
 	t := reflect.TypeOf(build)
