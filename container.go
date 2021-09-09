@@ -5,35 +5,16 @@ import (
 	"reflect"
 )
 
-type Container struct {
+type container struct {
 	builder   *containerBuilder
 	instances *itemHash
 }
 
-func newContainer(builder *containerBuilder) Container {
-	return Container{
-		builder:   builder,
-		instances: newItemHash(),
-	}
-}
-
-func (c Container) Has(key string) bool {
+func (c *container) Has(key string) bool {
 	return c.builder.HasDefinition(key)
 }
 
-func (c Container) Get(key string) interface{} {
-	return c.create(key)
-}
-
-func (c Container) HasParameter(key string) bool {
-	return c.builder.HasParameter(key)
-}
-
-func (c Container) GetParameter(key string) interface{} {
-	return c.builder.GetParameter(key)
-}
-
-func (c Container) create(key string) interface{} {
+func (c *container) Get(key string) interface{} {
 	def := c.builder.GetDefinition(key)
 	if def.Private() {
 		panic(fmt.Sprintf("service with key '%s' is private and can't be retrieved from the container", key))
@@ -43,10 +24,26 @@ func (c Container) create(key string) interface{} {
 		return c.instances.get(key)
 	}
 
-	args := []reflect.Value{reflect.ValueOf(c.builder)}
-	val := reflect.ValueOf(def.Build).Call(args)
-
-	c.instances.set(key, val[0].Interface())
+	c.instances.set(key, c.create(def))
 
 	return c.instances.get(key)
+}
+
+func (c *container) HasParameter(key string) bool {
+	return c.builder.HasParameter(key)
+}
+
+func (c *container) GetParameter(key string) interface{} {
+	return c.builder.GetParameter(key)
+}
+
+func (c *container) create(def *Definition) interface{} {
+	args := []reflect.Value{}
+	if reflect.TypeOf(def.Build).NumIn() > 0{
+		args = append(args, reflect.ValueOf(c))
+	}
+
+	val := reflect.ValueOf(def.Build).Call(args)
+
+	return val[0].Interface()
 }

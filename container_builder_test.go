@@ -84,7 +84,7 @@ func TestContainerBuilder_SetDefinition_PanicsIfResolved(t *testing.T) {
 	b.resolved = true
 
 	key := "key1"
-	val := func(b *containerBuilder) int {
+	val := func(b ContainerInterface) int {
 		return 1
 	}
 
@@ -129,7 +129,7 @@ func TestContainerBuilder_SetDefinition_PanicsIfInvalidConstructorArguments(t *t
 		return 1
 	}
 
-	assert.PanicsWithValue(t, "constructor 'func(int) int' can only receive a 'ContainerBuilderInterface' argument", func() {
+	assert.PanicsWithValue(t, "constructor 'func(int) int' can only receive a 'ContainerInterface' argument", func() {
 		b.SetDefinition(key, val)
 	})
 }
@@ -137,16 +137,16 @@ func TestContainerBuilder_SetDefinition_PanicsIfInvalidConstructorArguments(t *t
 func TestContainerBuilder_SetDefinition_Success(t *testing.T) {
 	b := NewContainerBuilder()
 	key := "key1"
-	val := func(b *containerBuilder) int {
+	val := func(b ContainerInterface) int {
 		return 1
 	}
 
 	b.SetDefinition(key, val)
 	assert.True(t, b.HasDefinition(key))
 
-	f, ok := b.GetDefinition(key).Build.(func(*containerBuilder) int)
+	f, ok := b.GetDefinition(key).Build.(func(ContainerInterface) int)
 	assert.True(t, ok)
-	assert.Equal(t, val(&containerBuilder{}), f(&containerBuilder{}))
+	assert.Equal(t, val(&container{}), f(&container{}))
 }
 
 func TestContainerBuilder_SetDefinition_SuccessIfConstructorHasNoArgument(t *testing.T) {
@@ -168,7 +168,7 @@ func TestContainerBuilder_SetDefinition_RemovesAlias(t *testing.T) {
 	b := NewContainerBuilder()
 	alias := "alias"
 	key := "key"
-	val := func(b *containerBuilder) int {
+	val := func(b ContainerInterface) int {
 		return 1
 	}
 
@@ -177,24 +177,24 @@ func TestContainerBuilder_SetDefinition_RemovesAlias(t *testing.T) {
 	assert.True(t, b.HasAlias(alias))
 	assert.True(t, b.HasDefinition(alias))
 
-	f, ok := b.GetDefinition(alias).Build.(func(*containerBuilder) int)
+	f, ok := b.GetDefinition(alias).Build.(func( ContainerInterface) int)
 	assert.True(t, ok)
-	assert.Equal(t, val(&containerBuilder{}), f(&containerBuilder{}))
+	assert.Equal(t, val(&container{}), f(&container{}))
 
 	b.SetDefinition(alias, val)
 	assert.True(t, b.HasDefinition(key))
 	assert.True(t, b.HasDefinition(alias))
 	assert.False(t, b.HasAlias(alias))
 
-	f, ok = b.GetDefinition(key).Build.(func(*containerBuilder) int)
+	f, ok = b.GetDefinition(key).Build.(func( ContainerInterface) int)
 	assert.True(t, ok)
-	assert.Equal(t, val(&containerBuilder{}), f(&containerBuilder{}))
+	assert.Equal(t, val(&container{}), f(&container{}))
 }
 
 func TestContainerBuilder_SetDefinition_SuccessWithTags(t *testing.T) {
 	b := NewContainerBuilder()
 	key := "key1 #private #shared #other"
-	val := func(b *containerBuilder) int {
+	val := func(b ContainerInterface) int {
 		return 1
 	}
 
@@ -207,9 +207,9 @@ func TestContainerBuilder_SetDefinition_SuccessWithTags(t *testing.T) {
 	assert.True(t, d.Shared())
 	assert.True(t, d.Tags.has("other"))
 
-	f, ok := d.Build.(func(*containerBuilder) int)
+	f, ok := d.Build.(func(ContainerInterface) int)
 	assert.True(t, ok)
-	assert.Equal(t, val(&containerBuilder{}), f(&containerBuilder{}))
+	assert.Equal(t, val(&container{}), f(&container{}))
 }
 
 func TestContainerBuilder_SetAlias_PanicsIfResolved(t *testing.T) {
@@ -240,7 +240,7 @@ func TestContainerBuilder_SetAlias_PanicsIfServiceKeyAlreadyExists(t *testing.T)
 
 	key := "key1"
 	def := "key1"
-	val := func(b *containerBuilder) int {
+	val := func(b ContainerInterface) int {
 		return 1
 	}
 	b.SetDefinition(def, val)
@@ -254,7 +254,7 @@ func TestContainerBuilder_SetAlias_Success(t *testing.T) {
 	b := NewContainerBuilder()
 	key := "key1"
 	alias := "alias1"
-	val := func(b *containerBuilder) int {
+	val := func(b ContainerInterface) int {
 		return 1
 	}
 
@@ -266,11 +266,11 @@ func TestContainerBuilder_SetAlias_Success(t *testing.T) {
 	assert.False(t, b.HasAlias(key))
 	assert.Equal(t, b.GetAlias(alias), key)
 
-	d, okDef := b.GetDefinition(key).Build.(func(*containerBuilder) int)
-	a, okAlias := b.GetDefinition(alias).Build.(func(*containerBuilder) int)
+	d, okDef := b.GetDefinition(key).Build.(func(ContainerInterface) int)
+	a, okAlias := b.GetDefinition(alias).Build.(func(ContainerInterface) int)
 	assert.True(t, okDef)
 	assert.True(t, okAlias)
-	assert.Equal(t, d(&containerBuilder{}), a(&containerBuilder{}))
+	assert.Equal(t, d(&container{}), a(&container{}))
 }
 
 func TestContainerBuilder_SetAlias_IgnoresKeyTags(t *testing.T) {
@@ -278,7 +278,7 @@ func TestContainerBuilder_SetAlias_IgnoresKeyTags(t *testing.T) {
 	key := "key1"
 	taggedAlias := "alias1 #tag1"
 	expectedAlias := "alias1"
-	val := func(b *containerBuilder) int {
+	val := func(b ContainerInterface) int {
 		return 1
 	}
 
@@ -290,9 +290,81 @@ func TestContainerBuilder_SetAlias_IgnoresKeyTags(t *testing.T) {
 	assert.True(t, b.HasDefinition(expectedAlias))
 	assert.Equal(t, b.GetAlias(expectedAlias), key)
 
-	d, okDef := b.GetDefinition(key).Build.(func(*containerBuilder) int)
-	a, okAlias := b.GetDefinition(expectedAlias).Build.(func(*containerBuilder) int)
+	d, okDef := b.GetDefinition(key).Build.(func(ContainerInterface) int)
+	a, okAlias := b.GetDefinition(expectedAlias).Build.(func(ContainerInterface) int)
 	assert.True(t, okDef)
 	assert.True(t, okAlias)
-	assert.Equal(t, d(&containerBuilder{}), a(&containerBuilder{}))
+	assert.Equal(t, d(&container{}), a(&container{}))
+}
+
+type DummyProvider struct {
+	spyRegistered bool
+	spyResolved   bool
+}
+
+func (p *DummyProvider) Register(b ContainerBuilderInterface) {
+	p.spyRegistered = true
+}
+
+func (p *DummyProvider) Resolve(b ContainerBuilderInterface) {
+	p.spyResolved = true
+}
+
+func TestContainerBuilder_AddProviders(t *testing.T) {
+	p1 := &DummyProvider{}
+	p2 := &DummyProvider{}
+
+	b := NewContainerBuilder()
+
+	b.AddProviders()
+	assert.Equal(t, 0, len(b.providers))
+
+	b.AddProviders(p1, p2)
+	assert.Equal(t, 2, len(b.providers))
+}
+
+func TestContainerBuilder_AddProviders_PanicsIfResolved(t *testing.T) {
+	p1 := &DummyProvider{}
+	p2 := &DummyProvider{}
+
+	b := NewContainerBuilder()
+	b.resolved = true
+
+	b.AddProviders()
+	assert.Equal(t, 0, len(b.providers))
+
+	assert.PanicsWithValue(t, "container is resolved and new items can not be set", func() {
+		b.AddProviders(p1, p2)
+	})
+}
+
+func TestContainerBuilder_GetContainer(t *testing.T) {
+	p1 := &DummyProvider{}
+	p2 := &DummyProvider{}
+
+	b := NewContainerBuilder()
+	b.AddProviders(p1, p2)
+	c := b.GetContainer()
+
+	assert.True(t, b.resolved)
+	assert.True(t, p1.spyRegistered)
+	assert.True(t, p1.spyResolved)
+	assert.True(t, p2.spyRegistered)
+	assert.True(t, p2.spyResolved)
+	assert.Same(t, b, c.builder)
+	assert.Empty(t, c.instances.all())
+}
+
+func TestContainerBuilder_GetContainer_UsesSameResolvedBuilder(t *testing.T) {
+	p1 := &DummyProvider{}
+	p2 := &DummyProvider{}
+
+	b := NewContainerBuilder()
+	b.AddProviders(p1, p2)
+	c1 := b.GetContainer()
+	c2 := b.GetContainer()
+
+	assert.Same(t, b, c1.builder)
+	assert.Same(t, c1.builder, c2.builder)
+	assert.NotSame(t, c1, c2)
 }

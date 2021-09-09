@@ -29,6 +29,13 @@ type Provider interface {
 	Resolve(builder ContainerBuilderInterface)
 }
 
+type ContainerInterface interface {
+	Has(key string) bool
+	Get(key string) interface{}
+	HasParameter(key string) bool
+	GetParameter(key string) interface{}
+}
+
 type ContainerBuilderInterface interface {
 	SetParameter(key string, param interface{})
 	HasParameter(key string) bool
@@ -139,26 +146,29 @@ func (c *containerBuilder) GetAlias(key string) string {
 // Providers
 
 func (c *containerBuilder) AddProviders(p ...Provider) {
-	c.providers = append(c.providers, p...)
+	if len(p) > 0 {
+		mustBeUnresolved(c)
+		c.providers = append(c.providers, p...)
+	}
 }
 
-func (c *containerBuilder) GetContainer() Container {
-	//This should be protected about concurrency
-	if c.resolved {
-		return newContainer(c)
+func (c *containerBuilder) GetContainer() *container {
+	if !c.resolved {
+		for _, p := range c.providers {
+			p.Register(c)
+		}
+
+		for _, p := range c.providers {
+			p.Resolve(c)
+		}
+
+		c.resolved = true
 	}
 
-	for _, p := range c.providers {
-		p.Register(c)
+	return &container{
+		builder:   c,
+		instances: newItemHash(),
 	}
-
-	for _, p := range c.providers {
-		p.Resolve(c)
-	}
-
-	c.resolved = true
-
-	return newContainer(c)
 }
 
 func mustBeUnresolved(c *containerBuilder) {
@@ -174,7 +184,7 @@ func mustJsonMarshal(param interface{}) {
 	}
 }
 
-var cbType = reflect.TypeOf((*ContainerBuilderInterface)(nil)).Elem()
+var cbType = reflect.TypeOf((*ContainerInterface)(nil)).Elem()
 
 func mustBeValidConstructor(build interface{}) {
 	t := reflect.TypeOf(build)
