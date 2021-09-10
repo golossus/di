@@ -7,6 +7,7 @@ import (
 
 type Container interface {
 	Get(key string) interface{}
+	GetTaggedBy(tag string, values ...string) []interface{}
 	GetParameter(key string) interface{}
 }
 
@@ -30,6 +31,16 @@ func (c *container) Get(key string) interface{} {
 	c.instances.set(key, c.construct(def, key))
 
 	return c.instances.get(key)
+}
+
+func (c *container) GetTaggedBy(tag string, values ...string) []interface{} {
+	keys := c.builder.GetKeysByTag(tag, values)
+	defs := make([]interface{}, 0, len(keys))
+	for _, key := range keys {
+		defs = append(defs, c.Get(key))
+	}
+
+	return defs
 }
 
 func (c *container) GetParameter(key string) interface{} {

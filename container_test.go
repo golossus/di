@@ -153,6 +153,42 @@ func TestContainer_Get_CanCreateWithPrivateDependency(t *testing.T) {
 	assert.Equal(t, 3, r)
 }
 
+func TestContainer_Get_CanCreateWithPrivateTaggedDependencies(t *testing.T) {
+	plus1 := func(cb Container) int {
+		return cb.Get("sum").(int) + 1
+	}
+
+	sum := func(cb Container) int {
+		sum := 0
+		for _, s := range cb.GetTaggedBy("sum") {
+			sum += s.(int)
+		}
+		return sum
+	}
+
+	tagged1 := func() int {
+		return 1
+	}
+	tagged2 := func() int {
+		return 10
+	}
+	tagged3 := func() int {
+		return 100
+	}
+
+	b := NewContainerBuilder()
+	b.SetDefinition("plus1", plus1)
+	b.SetDefinition("sum #private", sum)
+	b.SetDefinition("tagged1 #sum", tagged1)
+	b.SetDefinition("tagged2 #sum #shared #private", tagged2)
+	b.SetDefinition("tagged3 #sum #private", tagged3)
+	c := b.GetContainer()
+
+	r := c.Get("plus1").(int)
+
+	assert.Equal(t, 112, r)
+}
+
 func TestContainer_Get_PanicsIfCircularReference(t *testing.T) {
 	s1 := func(cb Container) int { return cb.Get("s2").(int) }
 	s2 := func(cb Container) int { return cb.Get("s3").(int) }
@@ -166,5 +202,63 @@ func TestContainer_Get_PanicsIfCircularReference(t *testing.T) {
 
 	assert.PanicsWithValue(t, "circular reference found while building service 's1' at service 's3'", func() {
 		_ = c.Get("s1")
+	})
+}
+
+func TestContainer_GetTaggedBy_PanicsIfSomeServiceIsPrivate(t *testing.T) {
+	tagged1 := func() int {
+		return 1
+	}
+	tagged2 := func() int {
+		return 10
+	}
+	tagged3 := func() int {
+		return 100
+	}
+
+	b := NewContainerBuilder()
+	b.SetDefinition("tagged1 #sum", tagged1)
+	b.SetDefinition("tagged2 #sum #shared", tagged2)
+	b.SetDefinition("tagged3 #sum #private", tagged3)
+	c := b.GetContainer()
+
+	assert.PanicsWithValue(t, "service with key 'tagged3' is private and can't be retrieved from the container", func() {
+		_ = c.GetTaggedBy("sum")
+	})
+}
+
+func TestContainer_GetTaggedBy_PanicsIfCircularReferenceUsedForDependencies(t *testing.T) {
+	s1 := func(cb Container) int { return cb.GetTaggedBy("tag")[0].(int) }
+	s2 := func(cb Container) int { return cb.Get("s3").(int) }
+	s3 := func(cb Container) int { return cb.Get("s1").(int) }
+
+	b := NewContainerBuilder()
+	b.SetDefinition("s1", s1)
+	b.SetDefinition("s2 #tag", s2)
+	b.SetDefinition("s3 #tag", s3)
+	c := b.GetContainer()
+
+	assert.PanicsWithValue(t, "circular reference found while building service 's1' at service 's3'", func() {
+		_ = c.Get("s1")
+	})
+}
+
+func TestContainer_GetTaggedBy_PanicsIfCircularReference(t *testing.T) {
+	s1 := func(cb Container) int { return cb.Get("s2").(int) }
+	s2 := func(cb Container) int { return cb.Get("s3").(int) }
+	s3 := func(cb Container) int { return cb.Get("s1").(int) }
+
+	b := NewContainerBuilder()
+	b.SetDefinition("s1", s1)
+	b.SetDefinition("s2 #tag=2", s2)
+	b.SetDefinition("s3 #tag=3", s3)
+	c := b.GetContainer()
+
+	assert.PanicsWithValue(t, "circular reference found while building service 's3' at service 's2'", func() {
+		_ = c.GetTaggedBy("tag", "3")
+	})
+
+	assert.PanicsWithValue(t, "circular reference found while building service 's2' at service 's1'", func() {
+		_ = c.GetTaggedBy("tag", "2")
 	})
 }

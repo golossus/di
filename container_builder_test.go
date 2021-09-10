@@ -368,3 +368,31 @@ func TestContainerBuilder_GetContainer_UsesSameResolvedBuilder(t *testing.T) {
 	assert.Same(t, c1.builder, c2.builder)
 	assert.NotSame(t, c1, c2)
 }
+
+func TestContainerBuilder_GetDefinitionTaggedBy(t *testing.T) {
+	key1 := "key1 #tag=one"
+	key2 := "key2 #tag=two"
+	key3 := "key3 #other"
+	val1 := func() int { return 1 }
+	val2 := func() int { return 2 }
+	val3 := func() int { return 3 }
+
+	b := NewContainerBuilder()
+	b.SetDefinition(key1, val1)
+	b.SetDefinition(key2, val2)
+	b.SetDefinition(key3, val3)
+
+	ds := b.GetKeysByTag("tag", []string{})
+	assert.Subset(t, []string{"key1", "key2"}, ds)
+	assert.Len(t, ds, 2)
+
+	ds = b.GetKeysByTag("tag", []string{"one", "two"})
+	assert.Subset(t, []string{"key1", "key2"}, ds)
+	assert.Len(t, ds, 2)
+
+	ds = b.GetKeysByTag("tag", []string{"one"})
+	assert.Equal(t, []string{"key1"}, ds)
+
+	ds = b.GetKeysByTag("tag", []string{"two"})
+	assert.Equal(t, []string{"key2"}, ds)
+}

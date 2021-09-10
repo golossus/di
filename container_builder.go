@@ -36,6 +36,7 @@ type ContainerBuilder interface {
 	SetDefinition(key string, build interface{})
 	HasDefinition(key string) bool
 	GetDefinition(key string) *Definition
+	GetKeysByTag(tag string, values []string) []string
 	SetAlias(key, def string)
 	HasAlias(key string) bool
 	GetAlias(key string) string
@@ -161,8 +162,31 @@ func (c *containerBuilder) GetContainer() *container {
 	return &container{
 		builder:   c,
 		instances: newItemHash(),
-		sealed: true,
+		sealed:    true,
 	}
+}
+
+func (c *containerBuilder) GetKeysByTag(tag string, values []string) []string {
+	tagged := make([]string, 0)
+	for key, def := range c.defs.all() {
+		d := def.(*Definition)
+		if !d.Tags.has(tag) {
+			continue
+		}
+		if len(values) == 0 {
+			tagged = append(tagged, key)
+			continue
+		}
+		tagVal := d.Tags.get(tag).(string)
+		for _, v := range values {
+			if v == tagVal {
+				tagged = append(tagged, key)
+				break
+			}
+		}
+	}
+
+	return tagged
 }
 
 func mustBeUnresolved(c *containerBuilder) {
