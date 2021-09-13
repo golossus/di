@@ -3,7 +3,6 @@ package di
 import (
 	"encoding/json"
 	"fmt"
-	"reflect"
 )
 
 const (
@@ -11,149 +10,173 @@ const (
 	tagPrivate = "private"
 )
 
+//Definition represents a service factory definition with additional metadata.
 type Definition struct {
-	Build interface{}
-	Tags  *itemHash
+	Factory         func(Container) interface{}
+	Tags            *itemHash
+	Shared, Private bool
 }
 
-func (d *Definition) Shared() bool {
-	return d.Tags.has(tagShared)
-}
-
-func (d *Definition) Private() bool {
-	return d.Tags.has(tagPrivate)
-}
-
+//Provider allows to provide definitions into containerBuilder. Some dependencies
+//might not be available during the call to this method.
 type Provider interface {
-	Register(builder ContainerBuilder)
+	Provide(builder ContainerBuilder)
+}
+
+//Resolver allows to resolve definitions into containerBuilder once all services
+//definitions are available.
+type Resolver interface {
 	Resolve(builder ContainerBuilder)
 }
 
+//ContainerBuilder interface declares the public api for containerBuilder type.
 type ContainerBuilder interface {
-	SetParameter(key string, param interface{})
-	HasParameter(key string) bool
-	GetParameter(key string) interface{}
-	SetDefinition(key string, build interface{})
+	SetDefinition(key string, factory func(c Container) interface{})
 	HasDefinition(key string) bool
 	GetDefinition(key string) *Definition
-	GetKeysByTag(tag string, values []string) []string
+	SetParameter(key string, value interface{})
+	HasParameter(key string) bool
+	GetParameter(key string) interface{}
 	SetAlias(key, def string)
 	HasAlias(key string) bool
 	GetAlias(key string) string
-	AddProviders(p ...Provider)
+	GetTaggedKeys(tag string, values []string) []string
 }
 
 type containerBuilder struct {
-	params, defs, alias *itemHash
-	providers           []Provider
-	parser              *keyParser
-	resolved            bool
+	definitions, parameters, alias *itemHash
+	parser                         *keyParser
+	providers                      []Provider
+	resolvers                      []Resolver
+	resolved                       bool
 }
 
+//NewContainerBuilder returns a pointer to a new containerBuilder instance.
 func NewContainerBuilder() *containerBuilder {
 	return &containerBuilder{
-		params:    newItemHash(),
-		defs:      newItemHash(),
-		alias:     newItemHash(),
-		parser:    newKeyParser(),
-		providers: make([]Provider, 0),
-		resolved:  false,
+		parameters:  newItemHash(),
+		definitions: newItemHash(),
+		alias:       newItemHash(),
+		parser:      newKeyParser(),
+		providers:   make([]Provider, 0),
+		resolvers:   make([]Resolver, 0),
+		resolved:    false,
 	}
 }
 
-// Parameters:
+//SetParameter adds a new parameter value to the container on a given key.
+func (c *containerBuilder) SetParameter(key string, value interface{}) {
+	c.panicIfResolved()
 
-func (c *containerBuilder) SetParameter(key string, param interface{}) {
-	mustBeUnresolved(c)
-	mustJsonMarshal(param)
+	if _, err := json.Marshal(value); err != nil {
+		panic(fmt.Sprintf("invalid parameter param '%#v'", value))
+	}
 
 	k, _ := c.parser.parse(key)
-
-	c.params.set(k, param)
+	c.parameters.set(k, value)
 }
 
+//HasParameter returns true if parameter for the key exists in the container.
 func (c *containerBuilder) HasParameter(key string) bool {
-	return c.params.has(key)
+	return c.parameters.has(key)
 }
 
+//GetParameter retrieves a container parameter for the key or panics if not found.
 func (c *containerBuilder) GetParameter(key string) interface{} {
-	return c.params.get(key)
+	return c.parameters.get(key)
 }
 
-// Definitions:
-
-func (c *containerBuilder) SetDefinition(key string, build interface{}) {
-	mustBeUnresolved(c)
-	mustBeValidConstructor(build)
+//SetDefinition adds a new definition to the container referenced by a given
+//key. Keys can contain tags in the form of "#tag[=value]" where the value part
+//can be omitted. Reserved tags "#shared" and "#private" can be used to make a
+//definition shared (factory will return a singleton) and private (service will
+//be available to be injected as dependency but not available to be retrieved
+//from current container).
+func (c *containerBuilder) SetDefinition(key string, factory func(c Container) interface{}) {
+	c.panicIfResolved()
 
 	k, tags := c.parser.parse(key)
 
 	c.alias.del(k)
-	c.defs.set(k, &Definition{
-		Build: build,
-		Tags:  tags,
+
+	c.definitions.set(k, &Definition{
+		Factory: factory,
+		Tags:    tags,
+		Shared:  tags.has(tagShared),
+		Private: tags.has(tagPrivate),
 	})
 }
 
+//HasDefinition returns true if definition for the key exists in the container.
 func (c *containerBuilder) HasDefinition(key string) bool {
 	if c.alias.has(key) {
 		key = c.alias.get(key).(string)
 	}
 
-	return c.defs.has(key)
+	return c.definitions.has(key)
 }
 
+//GetDefinition retrieves a container definition for the key or panics if not found.
 func (c *containerBuilder) GetDefinition(key string) *Definition {
 	if c.alias.has(key) {
 		key = c.alias.get(key).(string)
 	}
 
-	return c.defs.get(key).(*Definition)
+	return c.definitions.get(key).(*Definition)
 }
 
-// Aliases:
-
+//SetAlias sets an alias for an existing definition.
 func (c *containerBuilder) SetAlias(key, def string) {
-	mustBeUnresolved(c)
+	c.panicIfResolved()
 
 	k, _ := c.parser.parse(key)
 
-	if !c.defs.has(def) {
+	if !c.definitions.has(def) {
 		panic(fmt.Sprintf("definition with id '%s' does not exist and alias cannot be set", def))
 	}
 
-	if c.defs.has(k) {
+	if c.definitions.has(k) {
 		panic(fmt.Sprintf("definition with id '%s' already exists and alias cannot be set", key))
 	}
 
 	c.alias.set(k, def)
 }
 
+//HasAlias returns true if given alias has been set into the container.
 func (c *containerBuilder) HasAlias(key string) bool {
 	return c.alias.has(key)
 }
 
+//GetAlias returns the service key related to given alias key.
 func (c *containerBuilder) GetAlias(key string) string {
 	return c.alias.get(key).(string)
 }
 
-// Providers
-
-func (c *containerBuilder) AddProviders(p ...Provider) {
-	if len(p) > 0 {
-		mustBeUnresolved(c)
-		c.providers = append(c.providers, p...)
+//AddProvider adds a new service provider.
+func (c *containerBuilder) AddProvider(ps []Provider) {
+	if len(ps) > 0 {
+		c.panicIfResolved()
+		c.providers = append(c.providers, ps...)
 	}
 }
 
+//AddResolver adds a new service resolver.
+func (c *containerBuilder) AddResolver(rs []Resolver) {
+	if len(rs) > 0 {
+		c.panicIfResolved()
+		c.resolvers = append(c.resolvers, rs...)
+	}
+}
+
+//GetContainer resolves and returns the corresponding container.
 func (c *containerBuilder) GetContainer() *container {
 	if !c.resolved {
 		for _, p := range c.providers {
-			p.Register(c)
+			p.Provide(c)
 		}
 
-		for _, p := range c.providers {
-			p.Resolve(c)
+		for _, r := range c.resolvers {
+			r.Resolve(c)
 		}
 
 		c.resolved = true
@@ -166,9 +189,11 @@ func (c *containerBuilder) GetContainer() *container {
 	}
 }
 
-func (c *containerBuilder) GetKeysByTag(tag string, values []string) []string {
+//GetTaggedKeys returns all keys related to a given tag. If values provided, then
+//only the keys which match with tag and value will be returned.
+func (c *containerBuilder) GetTaggedKeys(tag string, values []string) []string {
 	tagged := make([]string, 0)
-	for key, def := range c.defs.all() {
+	for key, def := range c.definitions.all() {
 		d := def.(*Definition)
 		if !d.Tags.has(tag) {
 			continue
@@ -189,37 +214,8 @@ func (c *containerBuilder) GetKeysByTag(tag string, values []string) []string {
 	return tagged
 }
 
-func mustBeUnresolved(c *containerBuilder) {
+func (c *containerBuilder) panicIfResolved() {
 	if c.resolved {
 		panic("container is resolved and new items can not be set")
-	}
-}
-
-func mustJsonMarshal(param interface{}) {
-	_, err := json.Marshal(param)
-	if err != nil {
-		panic(fmt.Sprintf("invalid parameter param '%#v'", param))
-	}
-}
-
-var cbType = reflect.TypeOf((*Container)(nil)).Elem()
-
-func mustBeValidConstructor(build interface{}) {
-	t := reflect.TypeOf(build)
-
-	if t.Kind() != reflect.Func {
-		panic(fmt.Sprintf("invalid constructor kind '%T', must be a function", build))
-	}
-
-	if t.NumOut() != 1 {
-		panic(fmt.Sprintf("constructor '%T' should return a single value", build))
-	}
-
-	if t.NumIn() == 0 {
-		return
-	}
-
-	if t.NumIn() > 1 || !t.In(0).Implements(cbType) {
-		panic(fmt.Sprintf("constructor '%T' can only receive a '%s' argument", build, cbType.Name()))
 	}
 }

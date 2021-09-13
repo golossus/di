@@ -5,41 +5,26 @@ import (
 	"testing"
 )
 
-func TestContainer_Get_CanCreateWithZeroArgumentsConstructor(t *testing.T) {
-	newOne := func() int {
-		return 1
-	}
+func TestContainer_Get_BuildsService(t *testing.T) {
+	f := func(cb Container) interface{} { return 1 }
+	k := "one"
 
 	b := NewContainerBuilder()
-	b.SetDefinition("one", newOne)
+	b.SetDefinition(k, f)
 	c := b.GetContainer()
 
-	r := c.Get("one").(int)
+	r := c.Get(k).(int)
 
 	assert.Equal(t, 1, r)
 }
 
-func TestContainer_Get_CanCreateWithContainerArgumentConstructor(t *testing.T) {
-	newOne := func(cb Container) int {
-		return 1
-	}
-
-	b := NewContainerBuilder()
-	b.SetDefinition("one", newOne)
-	c := b.GetContainer()
-
-	r := c.Get("one").(int)
-
-	assert.Equal(t, 1, r)
-}
-
-func TestContainer_Get_CanCreateWithParameterDependencyConstructor(t *testing.T) {
-	newOne := func(cb Container) int {
+func TestContainer_Get_BuildsParameterDependencies(t *testing.T) {
+	f := func(cb Container) interface{} {
 		return cb.GetParameter("one").(int)
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("one", newOne)
+	b.SetDefinition("one", f)
 	b.SetParameter("one", 1)
 	c := b.GetContainer()
 
@@ -48,17 +33,17 @@ func TestContainer_Get_CanCreateWithParameterDependencyConstructor(t *testing.T)
 	assert.Equal(t, 1, r)
 }
 
-func TestContainer_Get_CanCreateWithDefinitionDependencyConstructor(t *testing.T) {
-	newOne := func(cb Container) int {
+func TestContainer_Get_BuildsDefinitionDependencies(t *testing.T) {
+	f := func(cb Container) interface{} {
 		return cb.Get("two").(int) - 1
 	}
 
-	newTwo := func() int {
+	newTwo := func(_ Container) interface{} {
 		return 2
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("one", newOne)
+	b.SetDefinition("one", f)
 	b.SetDefinition("two", newTwo)
 	b.SetParameter("one", 1)
 	c := b.GetContainer()
@@ -70,12 +55,12 @@ func TestContainer_Get_CanCreateWithDefinitionDependencyConstructor(t *testing.T
 
 func TestContainer_Get_CreatesSingleInstanceForSharedService(t *testing.T) {
 	spy := 0
-	shared := func(cb Container) int {
+	shared := func(cb Container) interface{} {
 		spy++
 		return spy
 	}
 
-	other := func(cb Container) int {
+	other := func(cb Container) interface{} {
 		return cb.Get("shared").(int)
 	}
 
@@ -95,7 +80,7 @@ func TestContainer_Get_CreatesSingleInstanceForSharedService(t *testing.T) {
 
 func TestContainer_Get_CreatesNewInstancesForNotSharedService(t *testing.T) {
 	spy := 0
-	newA := func(cb Container) int {
+	newA := func(cb Container) interface{} {
 		spy++
 		return spy
 	}
@@ -115,7 +100,7 @@ func TestContainer_Get_CreatesNewInstancesForNotSharedService(t *testing.T) {
 
 func TestContainer_Get_PanicsIfRequestingPrivateService(t *testing.T) {
 	spy := 0
-	newA := func(cb Container) int {
+	newA := func(cb Container) interface{} {
 		spy++
 		return spy
 	}
@@ -130,15 +115,15 @@ func TestContainer_Get_PanicsIfRequestingPrivateService(t *testing.T) {
 }
 
 func TestContainer_Get_CanCreateWithPrivateDependency(t *testing.T) {
-	public := func(cb Container) int {
+	public := func(cb Container) interface{} {
 		return cb.Get("public2").(int) + 1
 	}
 
-	public2 := func(cb Container) int {
+	public2 := func(cb Container) interface{} {
 		return cb.Get("private").(int) + 1
 	}
 
-	private := func() int {
+	private := func(_ Container) interface{} {
 		return 1
 	}
 
@@ -154,11 +139,11 @@ func TestContainer_Get_CanCreateWithPrivateDependency(t *testing.T) {
 }
 
 func TestContainer_Get_CanCreateWithPrivateTaggedDependencies(t *testing.T) {
-	plus1 := func(cb Container) int {
+	plus1 := func(cb Container) interface{} {
 		return cb.Get("sum").(int) + 1
 	}
 
-	sum := func(cb Container) int {
+	sum := func(cb Container) interface{} {
 		sum := 0
 		for _, s := range cb.GetTaggedBy("sum") {
 			sum += s.(int)
@@ -166,13 +151,13 @@ func TestContainer_Get_CanCreateWithPrivateTaggedDependencies(t *testing.T) {
 		return sum
 	}
 
-	tagged1 := func() int {
+	tagged1 := func(_ Container) interface{} {
 		return 1
 	}
-	tagged2 := func() int {
+	tagged2 := func(_ Container) interface{} {
 		return 10
 	}
-	tagged3 := func() int {
+	tagged3 := func(_ Container) interface{} {
 		return 100
 	}
 
@@ -190,9 +175,9 @@ func TestContainer_Get_CanCreateWithPrivateTaggedDependencies(t *testing.T) {
 }
 
 func TestContainer_Get_PanicsIfCircularReference(t *testing.T) {
-	s1 := func(cb Container) int { return cb.Get("s2").(int) }
-	s2 := func(cb Container) int { return cb.Get("s3").(int) }
-	s3 := func(cb Container) int { return cb.Get("s1").(int) }
+	s1 := func(cb Container) interface{} { return cb.Get("s2").(int) }
+	s2 := func(cb Container) interface{} { return cb.Get("s3").(int) }
+	s3 := func(cb Container) interface{} { return cb.Get("s1").(int) }
 
 	b := NewContainerBuilder()
 	b.SetDefinition("s1", s1)
@@ -206,13 +191,13 @@ func TestContainer_Get_PanicsIfCircularReference(t *testing.T) {
 }
 
 func TestContainer_GetTaggedBy_PanicsIfSomeServiceIsPrivate(t *testing.T) {
-	tagged1 := func() int {
+	tagged1 := func(_ Container) interface{} {
 		return 1
 	}
-	tagged2 := func() int {
+	tagged2 := func(_ Container) interface{} {
 		return 10
 	}
-	tagged3 := func() int {
+	tagged3 := func(_ Container) interface{} {
 		return 100
 	}
 
@@ -228,9 +213,9 @@ func TestContainer_GetTaggedBy_PanicsIfSomeServiceIsPrivate(t *testing.T) {
 }
 
 func TestContainer_GetTaggedBy_PanicsIfCircularReferenceUsedForDependencies(t *testing.T) {
-	s1 := func(cb Container) int { return cb.GetTaggedBy("tag")[0].(int) }
-	s2 := func(cb Container) int { return cb.Get("s3").(int) }
-	s3 := func(cb Container) int { return cb.Get("s1").(int) }
+	s1 := func(cb Container) interface{} { return cb.GetTaggedBy("tag")[0].(int) }
+	s2 := func(cb Container) interface{} { return cb.Get("s3").(int) }
+	s3 := func(cb Container) interface{} { return cb.Get("s1").(int) }
 
 	b := NewContainerBuilder()
 	b.SetDefinition("s1", s1)
@@ -244,9 +229,9 @@ func TestContainer_GetTaggedBy_PanicsIfCircularReferenceUsedForDependencies(t *t
 }
 
 func TestContainer_GetTaggedBy_PanicsIfCircularReference(t *testing.T) {
-	s1 := func(cb Container) int { return cb.Get("s2").(int) }
-	s2 := func(cb Container) int { return cb.Get("s3").(int) }
-	s3 := func(cb Container) int { return cb.Get("s1").(int) }
+	s1 := func(cb Container) interface{} { return cb.Get("s2").(int) }
+	s2 := func(cb Container) interface{} { return cb.Get("s3").(int) }
+	s3 := func(cb Container) interface{} { return cb.Get("s1").(int) }
 
 	b := NewContainerBuilder()
 	b.SetDefinition("s1", s1)
@@ -257,7 +242,6 @@ func TestContainer_GetTaggedBy_PanicsIfCircularReference(t *testing.T) {
 	assert.PanicsWithValue(t, "circular reference found while building service 's3' at service 's2'", func() {
 		_ = c.GetTaggedBy("tag", "3")
 	})
-
 	assert.PanicsWithValue(t, "circular reference found while building service 's2' at service 's1'", func() {
 		_ = c.GetTaggedBy("tag", "2")
 	})

@@ -20,21 +20,24 @@ type container struct {
 
 func (c *container) Get(key string) interface{} {
 	def := c.builder.GetDefinition(key)
-	if c.sealed && def.Private() {
+	if c.sealed && def.Private {
 		panic(fmt.Sprintf("service with key '%s' is private and can't be retrieved from the container", key))
 	}
 
-	if def.Shared() && c.instances.has(key) {
-		return c.instances.get(key)
+	if def.Shared && c.instances.has(key) {
+		i := c.instances.get(key)
+		return reflect.ValueOf(i).Elem().Interface()
 	}
 
-	c.instances.set(key, c.construct(def, key))
+	s := c.construct(def, key)
 
-	return c.instances.get(key)
+	c.instances.set(key, &s)
+
+	return s
 }
 
 func (c *container) GetTaggedBy(tag string, values ...string) []interface{} {
-	keys := c.builder.GetKeysByTag(tag, values)
+	keys := c.builder.GetTaggedKeys(tag, values)
 	defs := make([]interface{}, 0, len(keys))
 	for _, key := range keys {
 		defs = append(defs, c.Get(key))
@@ -55,14 +58,14 @@ func (c *container) construct(def *Definition, key string) interface{} {
 		}
 	}
 
-	args := []reflect.Value{}
-	if reflect.TypeOf(def.Build).NumIn() > 0 {
+	args := make([]reflect.Value, 0)
+	if reflect.TypeOf(def.Factory).NumIn() > 0 {
 		u := c.unseal()
 		u.loading = append(u.loading, key)
 		args = append(args, reflect.ValueOf(u))
 	}
 
-	val := reflect.ValueOf(def.Build).Call(args)
+	val := reflect.ValueOf(def.Factory).Call(args)
 
 	return val[0].Interface()
 }
