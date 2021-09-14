@@ -14,11 +14,17 @@ const (
 	tagPrivate = "private"
 )
 
-//Definition represents a service factory definition with additional metadata.
-type Definition struct {
+//definition represents a service factory definition with additional metadata.
+type definition struct {
 	Factory         func(Container) interface{}
 	Tags            *itemHash
 	Shared, Private bool
+}
+
+//alias represents a service alias identifier and additional metadata.
+type alias struct {
+	Key     string
+	Private bool
 }
 
 //Provider allows to provide definitions into containerBuilder. Some dependencies
@@ -27,7 +33,7 @@ type Provider interface {
 	Provide(builder ContainerBuilder)
 }
 
-//Resolver allows to resolve definitions into containerBuilder once all services
+//Resolver allows to resolve definitions into containerBuilder once All services
 //definitions are available.
 type Resolver interface {
 	Resolve(builder ContainerBuilder)
@@ -37,13 +43,13 @@ type Resolver interface {
 type ContainerBuilder interface {
 	SetDefinition(key string, factory func(c Container) interface{})
 	HasDefinition(key string) bool
-	GetDefinition(key string) *Definition
+	GetDefinition(key string) *definition
 	SetParameter(key string, value interface{})
 	HasParameter(key string) bool
 	GetParameter(key string) interface{}
 	SetAlias(key, def string)
 	HasAlias(key string) bool
-	GetAlias(key string) string
+	GetAlias(key string) *alias
 	GetTaggedKeys(tag string, values []string) []string
 }
 
@@ -68,7 +74,7 @@ func NewContainerBuilder() *containerBuilder {
 	}
 }
 
-//SetParameter adds a new parameter value to the container on a given key.
+//SetParameter adds a new parameter value to the container on a given Key.
 func (c *containerBuilder) SetParameter(key string, value interface{}) {
 	c.panicIfResolved()
 
@@ -80,18 +86,18 @@ func (c *containerBuilder) SetParameter(key string, value interface{}) {
 	c.parameters.set(k, value)
 }
 
-//HasParameter returns true if parameter for the key exists in the container.
+//HasParameter returns true if parameter for the Key exists in the container.
 func (c *containerBuilder) HasParameter(key string) bool {
-	return c.parameters.has(key)
+	return c.parameters.Has(key)
 }
 
-//GetParameter retrieves a container parameter for the key or panics if not found.
+//GetParameter retrieves a container parameter for the Key or panics if not found.
 func (c *containerBuilder) GetParameter(key string) interface{} {
-	return c.parameters.get(key)
+	return c.parameters.Get(key)
 }
 
 //SetDefinition adds a new definition to the container referenced by a given
-//key. Keys can contain tags in the form of "#tag[=value]" where the value part
+//Key. Keys can contain tags in the form of "#tag[=value]" where the value part
 //can be omitted. Reserved tags "#shared" and "#private" can be used to make a
 //definition shared (factory will return a singleton) and private (service will
 //be available to be injected as dependency but not available to be retrieved
@@ -103,57 +109,67 @@ func (c *containerBuilder) SetDefinition(key string, factory func(c Container) i
 
 	c.alias.del(k)
 
-	c.definitions.set(k, &Definition{
+	c.definitions.set(k, &definition{
 		Factory: factory,
 		Tags:    tags,
-		Shared:  tags.has(tagShared),
-		Private: tags.has(tagPrivate),
+		Shared:  tags.Has(tagShared),
+		Private: tags.Has(tagPrivate),
 	})
 }
 
-//HasDefinition returns true if definition for the key exists in the container.
+//HasDefinition returns true if definition for the Key exists in the container.
 func (c *containerBuilder) HasDefinition(key string) bool {
-	if c.alias.has(key) {
-		key = c.alias.get(key).(string)
+	if c.alias.Has(key) {
+		key = c.alias.Get(key).(*alias).Key
 	}
 
-	return c.definitions.has(key)
+	return c.definitions.Has(key)
 }
 
-//GetDefinition retrieves a container definition for the key or panics if not found.
-func (c *containerBuilder) GetDefinition(key string) *Definition {
-	if c.alias.has(key) {
-		key = c.alias.get(key).(string)
+//GetDefinition retrieves a container definition for the Key or panics if not found.
+func (c *containerBuilder) GetDefinition(key string) *definition {
+	if !c.alias.Has(key) {
+		return c.definitions.Get(key).(*definition)
+	}
+	a := c.alias.Get(key).(*alias)
+	d := c.definitions.Get(a.Key).(*definition)
+
+	if d.Private == a.Private {
+		return d
 	}
 
-	return c.definitions.get(key).(*Definition)
+	return &definition{
+		Factory: d.Factory,
+		Tags:    d.Tags,
+		Private: a.Private,
+	}
 }
 
 //SetAlias sets an alias for an existing definition.
 func (c *containerBuilder) SetAlias(key, def string) {
 	c.panicIfResolved()
 
-	k, _ := c.parser.parse(key)
+	k, tags := c.parser.parse(key)
 
-	if !c.definitions.has(def) {
+	if !c.definitions.Has(def) {
 		panic(fmt.Sprintf("definition with id '%s' does not exist and alias cannot be set", def))
 	}
 
-	if c.definitions.has(k) {
+	if c.definitions.Has(k) {
 		panic(fmt.Sprintf("definition with id '%s' already exists and alias cannot be set", key))
 	}
 
-	c.alias.set(k, def)
+	c.alias.set(k, &alias{def, tags.Has(tagPrivate)})
 }
 
-//HasAlias returns true if given alias has been set into the container.
+//HasAlias returns true if given alias Has been set into the container.
 func (c *containerBuilder) HasAlias(key string) bool {
-	return c.alias.has(key)
+	return c.alias.Has(key)
 }
 
-//GetAlias returns the service key related to given alias key.
-func (c *containerBuilder) GetAlias(key string) string {
-	return c.alias.get(key).(string)
+//GetAlias returns the service Key related to given alias Key.
+func (c *containerBuilder) GetAlias(key string) *alias {
+	return c.alias.Get(key).(*alias)
 }
 
 //AddProvider adds a new service provider.
@@ -193,20 +209,20 @@ func (c *containerBuilder) GetContainer() *container {
 	}
 }
 
-//GetTaggedKeys returns all keys related to a given tag. If values provided, then
+//GetTaggedKeys returns All keys related to a given tag. If values provided, then
 //only the keys which match with tag and value will be returned.
 func (c *containerBuilder) GetTaggedKeys(tag string, values []string) []string {
 	tagged := make([]string, 0)
-	for key, def := range c.definitions.all() {
-		d := def.(*Definition)
-		if !d.Tags.has(tag) {
+	for key, def := range c.definitions.All() {
+		d := def.(*definition)
+		if !d.Tags.Has(tag) {
 			continue
 		}
 		if len(values) == 0 {
 			tagged = append(tagged, key)
 			continue
 		}
-		tagVal := d.Tags.get(tag).(string)
+		tagVal := d.Tags.Get(tag).(string)
 		for _, v := range values {
 			if v == tagVal {
 				tagged = append(tagged, key)

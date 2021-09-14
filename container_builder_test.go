@@ -17,9 +17,9 @@ func TestNewContainerBuilder_ReturnsInitialised(t *testing.T) {
 	assert.NotNil(t, b.alias)
 	assert.NotNil(t, b.providers)
 	assert.NotNil(t, b.parser)
-	assert.Len(t, b.parameters.all(), 0)
-	assert.Len(t, b.definitions.all(), 0)
-	assert.Len(t, b.alias.all(), 0)
+	assert.Len(t, b.parameters.All(), 0)
+	assert.Len(t, b.definitions.All(), 0)
+	assert.Len(t, b.alias.All(), 0)
 	assert.Len(t, b.providers, 0)
 	assert.False(t, b.resolved)
 }
@@ -53,8 +53,8 @@ func TestContainerBuilder_SetParameter_IfValidValue(t *testing.T) {
 }
 
 func TestContainerBuilder_SetParameter_IgnoresKeyTags(t *testing.T) {
-	key := "some-key-with #tag"
-	keyParsed := "some-key-with"
+	key := "some-Key-with #tag"
+	keyParsed := "some-Key-with"
 	val := 1
 
 	b := NewContainerBuilder()
@@ -128,7 +128,7 @@ func TestContainerBuilder_SetDefinition_SuccessIfConstructorHasNoArgument(t *tes
 func TestContainerBuilder_SetDefinition_RemovesAlias(t *testing.T) {
 	b := NewContainerBuilder()
 	alias := "alias"
-	key := "key"
+	key := "Key"
 	val := func(c Container) interface{} {
 		return 1
 	}
@@ -164,7 +164,7 @@ func TestContainerBuilder_SetDefinition_SuccessWithTags(t *testing.T) {
 	d := b.GetDefinition("key1")
 	assert.True(t, d.Private)
 	assert.True(t, d.Shared)
-	assert.True(t, d.Tags.has("other"))
+	assert.True(t, d.Tags.Has("other"))
 
 	f := d.Factory
 	assert.Equal(t, val(&container{}), f(&container{}))
@@ -222,17 +222,18 @@ func TestContainerBuilder_SetAlias_Success(t *testing.T) {
 	assert.True(t, b.HasDefinition(alias))
 	assert.True(t, b.HasAlias(alias))
 	assert.False(t, b.HasAlias(key))
-	assert.Equal(t, b.GetAlias(alias), key)
+	assert.Equal(t, b.GetAlias(alias).Key, key)
+	assert.False(t, b.GetAlias(alias).Private, key)
 
 	d := b.GetDefinition(key).Factory
 	a := b.GetDefinition(alias).Factory
 	assert.Equal(t, d(&container{}), a(&container{}))
 }
 
-func TestContainerBuilder_SetAlias_IgnoresKeyTags(t *testing.T) {
+func TestContainerBuilder_SetAlias_IgnoresKeyTagsExceptPrivate(t *testing.T) {
 	b := NewContainerBuilder()
 	key := "key1"
-	taggedAlias := "alias1 #tag1"
+	taggedAlias := "alias1 #tag1 #private"
 	expectedAlias := "alias1"
 	val := func(c Container) interface{} {
 		return 1
@@ -244,7 +245,8 @@ func TestContainerBuilder_SetAlias_IgnoresKeyTags(t *testing.T) {
 	assert.True(t, b.HasAlias(expectedAlias))
 	assert.False(t, b.HasDefinition(taggedAlias))
 	assert.True(t, b.HasDefinition(expectedAlias))
-	assert.Equal(t, b.GetAlias(expectedAlias), key)
+	assert.Equal(t, b.GetAlias(expectedAlias).Key, key)
+	assert.True(t, b.GetAlias(expectedAlias).Private, key)
 
 	d := b.GetDefinition(key).Factory
 	a := b.GetDefinition(expectedAlias).Factory
@@ -317,7 +319,7 @@ func TestContainerBuilder_GetContainer(t *testing.T) {
 	assert.True(t, p2.spyProvide)
 	assert.True(t, p2.spyResolve)
 	assert.Same(t, b, c.builder)
-	assert.Empty(t, c.instances.all())
+	assert.Empty(t, c.instances.All())
 }
 
 func TestContainerBuilder_GetContainer_UsesSameResolvedBuilder(t *testing.T) {

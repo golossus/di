@@ -20,15 +20,15 @@ func (i *itemHash) set(key string, val interface{}) {
 	i.hash[key] = val
 }
 
-func (i *itemHash) has(key string) bool {
+func (i *itemHash) Has(key string) bool {
 	_, ok := i.hash[key]
 	return ok
 }
 
-func (i *itemHash) get(key string) interface{} {
+func (i *itemHash) Get(key string) interface{} {
 	val, ok := i.hash[key]
 	if !ok {
-		panic(fmt.Sprintf("item with key '%s' not found", key))
+		panic(fmt.Sprintf("item with Key '%s' not found", key))
 	}
 	return val
 }
@@ -39,7 +39,7 @@ func (i *itemHash) del(keys ...string) {
 	}
 }
 
-func (i *itemHash) all() map[string]interface{} {
+func (i *itemHash) All() map[string]interface{} {
 	all := make(map[string]interface{})
 	for key, val := range i.hash {
 		all[key] = val

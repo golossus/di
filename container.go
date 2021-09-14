@@ -28,8 +28,8 @@ func (c *container) Get(key string) interface{} {
 		panic(fmt.Sprintf("service with key '%s' is private and can't be retrieved from the container", key))
 	}
 
-	if def.Shared && c.instances.has(key) {
-		i := c.instances.get(key)
+	if def.Shared && c.instances.Has(key) {
+		i := c.instances.Get(key)
 		return reflect.ValueOf(i).Elem().Interface()
 	}
 
@@ -54,7 +54,7 @@ func (c *container) GetParameter(key string) interface{} {
 	return c.builder.GetParameter(key)
 }
 
-func (c *container) construct(def *Definition, key string) interface{} {
+func (c *container) construct(def *definition, key string) interface{} {
 	for i := 0; i < len(c.loading); i++ {
 		if c.loading[i] == key {
 			msg := "circular reference found while building service '%s' at service '%s'"

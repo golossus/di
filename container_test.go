@@ -118,6 +118,34 @@ func TestContainer_Get_PanicsIfRequestingPrivateService(t *testing.T) {
 	})
 }
 
+func TestContainer_Get_PanicsIfRequestingPrivateAlias(t *testing.T) {
+	spy := 0
+	newA := func(cb Container) interface{} { spy++; return spy }
+
+	b := NewContainerBuilder()
+	b.SetDefinition("a", newA)
+	b.SetAlias("a_alias #private", "a")
+	c := b.GetContainer()
+
+	assert.PanicsWithValue(t, "service with key 'a_alias' is private and can't be retrieved from the container", func() {
+		_ = c.Get("a_alias").(int)
+	})
+}
+
+func TestContainer_Get_RetrievesPrivateServiceThroughPublicAlias(t *testing.T) {
+	spy := 0
+	newA := func(cb Container) interface{} { spy++; return spy }
+
+	b := NewContainerBuilder()
+	b.SetDefinition("a #private ", newA)
+	b.SetAlias("a_alias", "a")
+	c := b.GetContainer()
+
+	s := c.Get("a_alias").(int)
+
+	assert.Equal(t, 1, s)
+}
+
 func TestContainer_Get_CanCreateWithPrivateDependency(t *testing.T) {
 	public := func(cb Container) interface{} {
 		return cb.Get("public2").(int) + 1
@@ -135,6 +163,31 @@ func TestContainer_Get_CanCreateWithPrivateDependency(t *testing.T) {
 	b.SetDefinition("public", public)
 	b.SetDefinition("public2", public2)
 	b.SetDefinition("private #private", private)
+	c := b.GetContainer()
+
+	r := c.Get("public").(int)
+
+	assert.Equal(t, 3, r)
+}
+
+func TestContainer_Get_CanCreateWithPrivateAliasDependency(t *testing.T) {
+	public := func(cb Container) interface{} {
+		return cb.Get("public2").(int) + 1
+	}
+
+	public2 := func(cb Container) interface{} {
+		return cb.Get("private_alias").(int) + 1
+	}
+
+	private := func(_ Container) interface{} {
+		return 1
+	}
+
+	b := NewContainerBuilder()
+	b.SetDefinition("public", public)
+	b.SetDefinition("public2", public2)
+	b.SetDefinition("private #private", private)
+	b.SetAlias("private_alias #private", "private")
 	c := b.GetContainer()
 
 	r := c.Get("public").(int)
