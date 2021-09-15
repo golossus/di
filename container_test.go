@@ -303,3 +303,23 @@ func TestContainer_GetTaggedBy_PanicsIfCircularReference(t *testing.T) {
 		_ = c.GetTaggedBy("tag", "2")
 	})
 }
+
+func TestContainer_Get_SharedServiceIfConcurrentAccess(t *testing.T) {
+	init := 0
+	seed := &init
+	s1 := func(cb Container) interface{} {
+		*seed = *seed + 1
+		return seed
+	}
+
+	b := NewContainerBuilder()
+	b.SetDefinition("s1 #shared", s1)
+	c := b.GetContainer()
+
+	for i := 0; i < 1000; i++ {
+		go func() {
+			actual := c.Get("s1").(*int)
+			assert.Equal(t, 1, *actual)
+		}()
+	}
+}

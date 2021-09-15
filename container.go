@@ -7,6 +7,7 @@ package di
 import (
 	"fmt"
 	"reflect"
+	"sync"
 )
 
 type Container interface {
@@ -20,6 +21,7 @@ type container struct {
 	instances *itemHash
 	sealed    bool
 	loading   []string
+	lock      *sync.Mutex
 }
 
 func (c *container) Get(key string) interface{} {
@@ -28,7 +30,14 @@ func (c *container) Get(key string) interface{} {
 		panic(fmt.Sprintf("service with key '%s' is private and can't be retrieved from the container", key))
 	}
 
-	if def.Shared && c.instances.Has(key) {
+	if !def.Shared{
+		return c.construct(def, key)
+	}
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.instances.Has(key) {
 		i := c.instances.Get(key)
 		return reflect.ValueOf(i).Elem().Interface()
 	}
@@ -84,5 +93,6 @@ func (c *container) unseal() *container {
 		instances: c.instances,
 		sealed:    false,
 		loading:   make([]string, 0),
+		lock:      &sync.Mutex{},
 	}
 }

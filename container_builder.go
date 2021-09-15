@@ -7,6 +7,7 @@ package di
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 )
 
 const (
@@ -206,6 +207,7 @@ func (c *containerBuilder) GetContainer() *container {
 		builder:   c,
 		instances: newItemHash(),
 		sealed:    true,
+		lock:      &sync.Mutex{},
 	}
 }
 
