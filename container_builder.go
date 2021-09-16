@@ -258,7 +258,7 @@ func (c *containerBuilder) GetTaggedKeys(tag string, values []string) []string {
 func (c *containerBuilder) panicIfResolved() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	
+
 	if c.resolved {
 		panic("container is resolved and new items can not be set")
 	}
