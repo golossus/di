@@ -34,10 +34,24 @@ type Provider interface {
 	Provide(builder ContainerBuilder)
 }
 
+//ProviderFunc adapts a normal func into a Provider.
+type ProviderFunc func(ContainerBuilder)
+
+func (f ProviderFunc) Provide(b ContainerBuilder) {
+	f(b)
+}
+
 //Resolver allows to resolve definitions into containerBuilder once All services
 //definitions are available.
 type Resolver interface {
 	Resolve(builder ContainerBuilder)
+}
+
+//ProviderFunc adapts a normal func into a Resolver.
+type ResolverFunc func(ContainerBuilder)
+
+func (f ResolverFunc) Resolve(b ContainerBuilder) {
+	f(b)
 }
 
 //ContainerBuilder interface declares the public api for containerBuilder type.
@@ -60,6 +74,7 @@ type containerBuilder struct {
 	providers                      []Provider
 	resolvers                      []Resolver
 	resolved                       bool
+	lock                           *sync.Mutex
 }
 
 //NewContainerBuilder returns a pointer to a new containerBuilder instance.
@@ -72,6 +87,7 @@ func NewContainerBuilder() *containerBuilder {
 		providers:   make([]Provider, 0),
 		resolvers:   make([]Resolver, 0),
 		resolved:    false,
+		lock:        &sync.Mutex{},
 	}
 }
 
@@ -191,6 +207,9 @@ func (c *containerBuilder) AddResolver(rs []Resolver) {
 
 //GetContainer resolves and returns the corresponding container.
 func (c *containerBuilder) GetContainer() *container {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	if !c.resolved {
 		for _, p := range c.providers {
 			p.Provide(c)
@@ -237,6 +256,9 @@ func (c *containerBuilder) GetTaggedKeys(tag string, values []string) []string {
 }
 
 func (c *containerBuilder) panicIfResolved() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	
 	if c.resolved {
 		panic("container is resolved and new items can not be set")
 	}

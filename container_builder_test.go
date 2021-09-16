@@ -253,16 +253,9 @@ func TestContainerBuilder_SetAlias_IgnoresKeyTagsExceptPrivate(t *testing.T) {
 	assert.Equal(t, d(&container{}), a(&container{}))
 }
 
-type DummyProviderResolver struct {
-	spyProvide, spyResolve bool
-}
-
-func (p *DummyProviderResolver) Provide(_ ContainerBuilder) { p.spyProvide = true }
-func (p *DummyProviderResolver) Resolve(_ ContainerBuilder) { p.spyResolve = true }
-
 func TestContainerBuilder_AddProvider(t *testing.T) {
-	p1 := &DummyProviderResolver{}
-	p2 := &DummyProviderResolver{}
+	p1 := ProviderFunc(func(_ ContainerBuilder) {})
+	p2 := ProviderFunc(func(_ ContainerBuilder) {})
 
 	b := NewContainerBuilder()
 
@@ -271,8 +264,8 @@ func TestContainerBuilder_AddProvider(t *testing.T) {
 }
 
 func TestContainerBuilder_AddProvider_PanicsIfResolved(t *testing.T) {
-	p1 := &DummyProviderResolver{}
-	p2 := &DummyProviderResolver{}
+	p1 := ProviderFunc(func(_ ContainerBuilder) {})
+	p2 := ProviderFunc(func(_ ContainerBuilder) {})
 
 	b := NewContainerBuilder()
 	b.resolved = true
@@ -283,8 +276,8 @@ func TestContainerBuilder_AddProvider_PanicsIfResolved(t *testing.T) {
 }
 
 func TestContainerBuilder_AddResolver(t *testing.T) {
-	p1 := &DummyProviderResolver{}
-	p2 := &DummyProviderResolver{}
+	p1 := ResolverFunc(func(_ ContainerBuilder) {})
+	p2 := ResolverFunc(func(_ ContainerBuilder) {})
 
 	b := NewContainerBuilder()
 
@@ -293,8 +286,8 @@ func TestContainerBuilder_AddResolver(t *testing.T) {
 }
 
 func TestContainerBuilder_AddResolver_PanicsIfResolved(t *testing.T) {
-	p1 := &DummyProviderResolver{}
-	p2 := &DummyProviderResolver{}
+	p1 := ResolverFunc(func(_ ContainerBuilder) {})
+	p2 := ResolverFunc(func(_ ContainerBuilder) {})
 
 	b := NewContainerBuilder()
 	b.resolved = true
@@ -305,29 +298,32 @@ func TestContainerBuilder_AddResolver_PanicsIfResolved(t *testing.T) {
 }
 
 func TestContainerBuilder_GetContainer(t *testing.T) {
-	p1 := &DummyProviderResolver{}
-	p2 := &DummyProviderResolver{}
+	spyProvide := new(bool)
+	spyResolve := new(bool)
+	p1 := ProviderFunc(func(_ ContainerBuilder) {
+		*spyProvide = true
+	})
+	p2 := ResolverFunc(func(_ ContainerBuilder) {
+		*spyResolve = true
+	})
 
 	b := NewContainerBuilder()
-	b.AddProvider([]Provider{p1, p2})
-	b.AddResolver([]Resolver{p1, p2})
+	b.AddProvider([]Provider{p1})
+	b.AddResolver([]Resolver{p2})
 	c := b.GetContainer()
 
 	assert.True(t, b.resolved)
-	assert.True(t, p1.spyProvide)
-	assert.True(t, p1.spyResolve)
-	assert.True(t, p2.spyProvide)
-	assert.True(t, p2.spyResolve)
+	assert.True(t, *spyProvide)
+	assert.True(t, *spyResolve)
 	assert.Same(t, b, c.builder)
 	assert.Empty(t, c.instances.All())
 }
 
 func TestContainerBuilder_GetContainer_UsesSameResolvedBuilder(t *testing.T) {
-	p1 := &DummyProviderResolver{}
-	p2 := &DummyProviderResolver{}
+	p1 := ProviderFunc(func(_ ContainerBuilder) {})
 
 	b := NewContainerBuilder()
-	b.AddProvider([]Provider{p1, p2})
+	b.AddProvider([]Provider{p1})
 	c1 := b.GetContainer()
 	c2 := b.GetContainer()
 
@@ -362,4 +358,32 @@ func TestContainerBuilder_GetDefinitionTaggedBy(t *testing.T) {
 
 	ds = b.GetTaggedKeys("tag", []string{"two"})
 	assert.Equal(t, []string{"key2"}, ds)
+}
+
+func TestContainerBuilder_GetContainer_IfConcurrent(t *testing.T) {
+	init := new(int)
+	*init = 0
+
+	p := ProviderFunc(func(b ContainerBuilder) {
+		b.SetDefinition("s1", func(cb Container) interface{} {
+			return false
+		})
+
+		if *init == 1 {
+			b.SetDefinition("s1", func(cb Container) interface{} {
+				return true
+			})
+		}
+		*init++
+	})
+
+	b := NewContainerBuilder()
+	b.AddProvider([]Provider{p})
+
+	for i := 0; i < 1000; i++ {
+		go func() {
+			c := b.GetContainer()
+			assert.False(t, c.Get("s1").(bool))
+		}()
+	}
 }

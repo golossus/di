@@ -30,7 +30,7 @@ func (c *container) Get(key string) interface{} {
 		panic(fmt.Sprintf("service with key '%s' is private and can't be retrieved from the container", key))
 	}
 
-	if !def.Shared{
+	if !def.Shared {
 		return c.construct(def, key)
 	}
 
@@ -71,14 +71,10 @@ func (c *container) construct(def *definition, key string) interface{} {
 		}
 	}
 
-	args := make([]reflect.Value, 0)
-	if reflect.TypeOf(def.Factory).NumIn() > 0 {
-		u := c.unseal()
-		u.loading = append(u.loading, key)
-		args = append(args, reflect.ValueOf(u))
-	}
+	u := c.unseal()
+	u.loading = append(u.loading, key)
 
-	val := reflect.ValueOf(def.Factory).Call(args)
+	val := reflect.ValueOf(def.Factory).Call([]reflect.Value{reflect.ValueOf(u)})
 
 	return val[0].Interface()
 }
