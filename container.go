@@ -10,6 +10,7 @@ import (
 	"sync"
 )
 
+//Container is the public container interface, used mainly on service factories.
 type Container interface {
 	Get(key string) interface{}
 	GetTaggedBy(tag string, values ...string) []interface{}
@@ -24,6 +25,8 @@ type container struct {
 	lock      *sync.Mutex
 }
 
+//Get will retrieve a service form the container by a given key. It will panic if
+//service is not found or if the service has been configured as private.
 func (c *container) Get(key string) interface{} {
 	def := c.builder.GetDefinition(key)
 	if c.sealed && def.Private {
@@ -49,6 +52,9 @@ func (c *container) Get(key string) interface{} {
 	return s
 }
 
+//GetTaggedBy returns all services related to a given tag. If values provided, then
+//only the services which match with tag and value will be returned. Services are
+//not sorted so the services order may differ on consecutives calls.
 func (c *container) GetTaggedBy(tag string, values ...string) []interface{} {
 	keys := c.builder.GetTaggedKeys(tag, values)
 	defs := make([]interface{}, 0, len(keys))
@@ -59,8 +65,31 @@ func (c *container) GetTaggedBy(tag string, values ...string) []interface{} {
 	return defs
 }
 
+//GetParameter retrieves a container parameter for the Key or panics if not found.
 func (c *container) GetParameter(key string) interface{} {
 	return c.builder.GetParameter(key)
+}
+
+//MustBuild builds all the public services once to discover unexpected panic on runtime. If given
+//true as parameter, singleton services instances will be preserved. On the contrary, any service
+//will be removed to have a fresh container.
+func (c *container) MustBuild(dry bool) {
+	for k, d := range c.builder.definitions.All() {
+		if d.(*definition).Private {
+			continue
+		}
+		_ = c.Get(k)
+	}
+
+	if dry {
+		c = &container{
+			builder:   c.builder,
+			instances: newItemHash(),
+			sealed:    true,
+			loading:   make([]string, 0),
+			lock:      c.lock,
+		}
+	}
 }
 
 func (c *container) construct(def *definition, key string) interface{} {

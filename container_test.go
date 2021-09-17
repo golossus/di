@@ -323,3 +323,62 @@ func TestContainer_Get_SharedServiceIfConcurrentAccess(t *testing.T) {
 		}()
 	}
 }
+
+func TestContainer_MustBuild_panicsOnInvalidService(t *testing.T) {
+	s1 := func(c Container) interface{} {
+		return c.Get("s2").(int)
+	}
+	s2 := func(c Container) interface{} {
+		return "I'm a string!'"
+	}
+
+	b := NewContainerBuilder()
+	b.SetDefinition("s1", s1)
+	b.SetDefinition("s2", s2)
+
+	c := b.GetContainer()
+
+	assert.Panics(t, func() {
+		c.MustBuild(true)
+	})
+}
+
+func TestContainer_MustBuild_doesNotPanicAndClearsInstancesIfAllValid(t *testing.T) {
+	s1 := func(c Container) interface{} {
+		return c.Get("s2").(*int)
+	}
+
+	s2 := func(c Container) interface{} {
+		value := 1
+		return &value
+	}
+
+	b := NewContainerBuilder()
+	b.SetDefinition("s1", s1)
+	b.SetDefinition("s2", s2)
+	c := b.GetContainer()
+
+	c.MustBuild(true)
+
+	assert.Empty(t, c.instances.All())
+}
+
+func TestContainer_MustBuild_doesNotPanicAndDoesNotClearInstancesIfAllValid(t *testing.T) {
+	s1 := func(c Container) interface{} {
+		return c.Get("s2").(*int)
+	}
+
+	s2 := func(c Container) interface{} {
+		value := 1
+		return &value
+	}
+
+	b := NewContainerBuilder()
+	b.SetDefinition("s1", s1)
+	b.SetDefinition("s2 #shared #private", s2)
+	c := b.GetContainer()
+
+	c.MustBuild(false)
+
+	assert.Len(t, c.instances.All(), 1)
+}
