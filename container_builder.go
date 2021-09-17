@@ -15,6 +15,11 @@ const (
 	tagPrivate = "private"
 )
 
+type Some struct {
+	Key string
+	Val interface{}
+}
+
 //definition represents a service factory definition with additional metadata.
 type definition struct {
 	Factory         func(Container) interface{}
@@ -56,6 +61,7 @@ func (f ResolverFunc) Resolve(b ContainerBuilder) {
 
 //ContainerBuilder interface declares the public api for containerBuilder type.
 type ContainerBuilder interface {
+	SetMany(all ...Some)
 	SetDefinition(key string, factory func(c Container) interface{})
 	HasDefinition(key string) bool
 	GetDefinition(key string) *definition
@@ -111,6 +117,19 @@ func (c *containerBuilder) HasParameter(key string) bool {
 //GetParameter retrieves a container parameter for the Key or panics if not found.
 func (c *containerBuilder) GetParameter(key string) interface{} {
 	return c.parameters.Get(key)
+}
+
+func (c *containerBuilder) SetMany(all ...Some) {
+	for _, i := range all {
+		switch i.Val.(type) {
+		case string:
+			c.SetAlias(i.Key, i.Val.(string))
+		case func(c Container) interface{}:
+			c.SetDefinition(i.Key, i.Val.(func(c Container) interface{}))
+		default:
+			c.SetParameter(i.Key, i.Val)
+		}
+	}
 }
 
 //SetDefinition adds a new definition to the container referenced by a given

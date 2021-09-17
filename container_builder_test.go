@@ -387,3 +387,18 @@ func TestContainerBuilder_GetContainer_IfConcurrent(t *testing.T) {
 		}()
 	}
 }
+
+func TestContainerBuilder_SetMany_setsAllTypes(t *testing.T) {
+	b := NewContainerBuilder()
+	b.SetMany([]Some{
+		{Key: "service #private", Val: func(c Container) interface{} {
+			return c.GetParameter("param").(int)
+		}},
+		{Key: "param", Val: 1},
+		{Key: "alias", Val: "service"},
+	}...)
+
+	assert.True(t, b.HasDefinition("service"))
+	assert.True(t, b.HasParameter("param"))
+	assert.True(t, b.HasAlias("alias"))
+}
