@@ -332,8 +332,8 @@ func TestContainerBuilder_GetContainer_UsesSameResolvedBuilder(t *testing.T) {
 	assert.NotSame(t, c1, c2)
 }
 
-func TestContainerBuilder_GetDefinitionTaggedBy(t *testing.T) {
-	key1 := "key1 #tag=one"
+func TestContainerBuilder_GetTaggedKeys(t *testing.T) {
+	key1 := "key1 #tag=one #"
 	key2 := "key2 #tag=two"
 	key3 := "key3 #other"
 	val1 := func(_ Container) interface{} { return 1 }

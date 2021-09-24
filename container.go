@@ -54,7 +54,8 @@ func (c *container) Get(key string) interface{} {
 
 //GetTaggedBy returns all services related to a given tag. If values provided, then
 //only the services which match with tag and value will be returned. Services are
-//not sorted so the services order may differ on consecutives calls.
+//sorted by priority defined with the #priotity tag. If not defined, priority is
+//zero. Services with higher priority are returned first.
 func (c *container) GetTaggedBy(tag string, values ...string) []interface{} {
 	keys := c.builder.GetTaggedKeys(tag, values)
 	defs := make([]interface{}, 0, len(keys))

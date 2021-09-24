@@ -8,16 +8,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 )
 
 const (
-	tagShared  = "shared"
-	tagPrivate = "private"
-	tagInject  = "inject"
+	tagShared   = "shared"
+	tagPrivate  = "private"
+	tagPriority = "priority"
+	tagInject   = "inject"
 
 	paramPrefix = "_"
+
+	priorityDefault = 0
 )
 
 type Some struct {
@@ -30,6 +35,7 @@ type definition struct {
 	Factory         func(Container) interface{}
 	Tags            *itemHash
 	Shared, Private bool
+	Priority        int16
 }
 
 //alias represents a service alias identifier and additional metadata.
@@ -207,11 +213,22 @@ func (c *containerBuilder) SetDefinition(key string, factory func(c Container) i
 
 	c.alias.del(k)
 
+	priority := int16(priorityDefault)
+	if tags.Has(tagPriority) {
+		prioValue := tags.Get(tagPriority).(string)
+		parsed, err := strconv.ParseInt(prioValue, 10, 16)
+		if err != nil {
+			panic(fmt.Sprintf("priority value %s is not a valid number", prioValue))
+		}
+		priority = int16(parsed)
+	}
+
 	c.definitions.set(k, &definition{
-		Factory: factory,
-		Tags:    tags,
-		Shared:  tags.Has(tagShared),
-		Private: tags.Has(tagPrivate),
+		Factory:  factory,
+		Tags:     tags,
+		Shared:   tags.Has(tagShared),
+		Private:  tags.Has(tagPrivate),
+		Priority: priority,
 	})
 }
 
@@ -314,26 +331,34 @@ func (c *containerBuilder) GetContainer() *container {
 //GetTaggedKeys returns All keys related to a given tag. If values provided, then
 //only the keys which match with tag and value will be returned.
 func (c *containerBuilder) GetTaggedKeys(tag string, values []string) []string {
-	tagged := make([]string, 0)
+	tagged := make([]Some, 0)
 	for key, def := range c.definitions.All() {
 		d := def.(*definition)
 		if !d.Tags.Has(tag) {
 			continue
 		}
 		if len(values) == 0 {
-			tagged = append(tagged, key)
+			tagged = append(tagged, Some{key, d})
 			continue
 		}
 		tagVal := d.Tags.Get(tag).(string)
 		for _, v := range values {
 			if v == tagVal {
-				tagged = append(tagged, key)
+				tagged = append(tagged, Some{key, d})
 				break
 			}
 		}
 	}
 
-	return tagged
+	sort.SliceStable(tagged, func(i, j int) bool {
+		return tagged[i].Val.(*definition).Priority > tagged[j].Val.(*definition).Priority
+	})
+
+	keys := make([]string, 0, len(tagged))
+	for _, i := range tagged{
+		keys = append(keys, i.Key)
+	}
+	return keys
 }
 
 func (c *containerBuilder) panicIfResolved() {

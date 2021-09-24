@@ -246,8 +246,30 @@ func TestContainer_Get_PanicsIfCircularReference(t *testing.T) {
 		_ = c.Get("s1")
 	})
 }
+func TestContainer_GetTaggedBy(t *testing.T) {
+
+	tagged1 := func(_ Container) interface{} { return 1 }
+	tagged2 := func(_ Container) interface{} { return 10 }
+	tagged3 := func(_ Container) interface{} { return 100 }
+
+	t.Run("retrieves services ordered by priority", func(t *testing.T) {
+		b := NewContainerBuilder()
+		b.SetDefinition("tagged1 #sum #priority=1", tagged1)
+		b.SetDefinition("tagged2 #sum", tagged2)
+		b.SetDefinition("tagged3 #sum #priority=2", tagged3)
+
+		c := b.GetContainer()
+
+		result := c.GetTaggedBy("sum")
+
+		expected := []interface{}{100, 1, 10}
+		assert.Equal(t, expected, result)
+	})
+
+}
 
 func TestContainer_GetTaggedBy_PanicsIfSomeServiceIsPrivate(t *testing.T) {
+
 	tagged1 := func(_ Container) interface{} {
 		return 1
 	}
