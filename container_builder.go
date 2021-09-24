@@ -7,12 +7,17 @@ package di
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strings"
 	"sync"
 )
 
 const (
 	tagShared  = "shared"
 	tagPrivate = "private"
+	tagInject  = "inject"
+
+	paramPrefix = "_"
 )
 
 type Some struct {
@@ -127,9 +132,66 @@ func (c *containerBuilder) SetMany(all ...Some) {
 		case func(c Container) interface{}:
 			c.SetDefinition(i.Key, i.Val.(func(c Container) interface{}))
 		default:
+			_, tags := c.parser.parse(i.Key)
+			if tags.Has(tagInject) {
+				c.SetInjectable(i.Key, i.Val)
+				continue
+			}
 			c.SetParameter(i.Key, i.Val)
 		}
 	}
+}
+
+func (c *containerBuilder) SetInjectable(key string, i interface{}) {
+	t := reflect.TypeOf(i)
+	isPtr := false
+	if t.Kind() == reflect.Ptr {
+		isPtr = true
+		t = t.Elem()
+	}
+
+	fields := make(map[int]string)
+	for j := 0; j < t.NumField(); j++ {
+		f := t.Field(j)
+		k, ok := f.Tag.Lookup("inject")
+		if !ok {
+			continue
+		}
+
+		if len(f.PkgPath) != 0 {
+			panic(fmt.Sprintf("unexported field %s/%s can not be injected", f.PkgPath, f.Name))
+		}
+
+		if len(k) == 0 {
+			panic(fmt.Sprintf("no injection key present for field %s: %s", t.Name(), f.Name))
+		}
+
+		fields[j] = k
+	}
+
+	c.SetDefinition(key, func(c Container) interface{} {
+		t := reflect.New(t)
+		e := t.Elem()
+		for i, k := range fields {
+			var p interface{}
+			if strings.HasPrefix(k, paramPrefix) {
+				p = c.GetParameter(strings.TrimLeft(k, paramPrefix))
+			} else {
+				p = c.Get(k)
+			}
+
+			v := reflect.ValueOf(p)
+			e.Field(i).Set(v)
+		}
+
+		if isPtr {
+			return t.Interface()
+
+		}
+
+		return e.Interface()
+	})
+
 }
 
 //SetDefinition adds a new definition to the container referenced by a given

@@ -396,9 +396,100 @@ func TestContainerBuilder_SetMany_setsAllTypes(t *testing.T) {
 		}},
 		{Key: "param", Val: 1},
 		{Key: "alias", Val: "service"},
+		{Key: "injectable #inject", Val: struct{}{}},
 	}...)
 
 	assert.True(t, b.HasDefinition("service"))
+	assert.True(t, b.HasDefinition("injectable"))
 	assert.True(t, b.HasParameter("param"))
 	assert.True(t, b.HasAlias("alias"))
+}
+
+func TestContainerBuilder_SetInjectable(t *testing.T) {
+	type Empty struct{}
+	type NoneInject struct {
+		F1 string
+	}
+	type ServiceInject struct {
+		F1 string `inject:"s1"`
+	}
+	type ParameterInject struct {
+		P1 string `inject:"_p1"`
+	}
+	type UnexportedField struct {
+		f1 string `inject:"s1"`
+	}
+	type EmptyInjectKey struct {
+		F1 string `inject:""`
+	}
+	type Composed struct {
+		S1 string          `inject:"s1"`
+		P1 string          `inject:"_p1"`
+		S2 ServiceInject   `inject:"s2"`
+		P2 ParameterInject `inject:"p2"`
+	}
+
+	for _, data := range []struct {
+		name     string
+		value    interface{}
+		expected interface{}
+	}{
+		{"can build empty struct", Empty{}, Empty{}},
+		{"can build struct without inject tags", NoneInject{}, NoneInject{}},
+		{"can build struct injecting services in exported fields", ServiceInject{}, ServiceInject{F1: "bye!"}},
+		{"can build struct injecting parameters in exported fields", ParameterInject{}, ParameterInject{P1: "hi!"}},
+		{"can build pointers to struct injecting services in exported fields", &ServiceInject{}, &ServiceInject{F1: "bye!"}},
+	} {
+		t.Run(data.name, func(t *testing.T) {
+			b := NewContainerBuilder()
+			b.SetParameter("p1", "hi!")
+			b.SetDefinition("s1", func(c Container) interface{} { return "bye!" })
+
+			b.SetInjectable("i1", data.value)
+			c := b.GetContainer()
+			s := c.Get("i1")
+
+			assert.Equal(t, data.expected, s)
+		})
+	}
+
+	for _, data := range []struct {
+		name  string
+		value interface{}
+	}{
+		{"panics if unexported field to inject", UnexportedField{f1: ""}},
+		{"panics if empty injection key", EmptyInjectKey{}},
+	} {
+		t.Run(data.name, func(t *testing.T) {
+			b := NewContainerBuilder()
+			b.SetParameter("p1", "hi!")
+			b.SetDefinition("s1", func(c Container) interface{} { return "bye!" })
+
+			assert.Panics(t, func() {
+				b.SetInjectable("i1", data.value)
+			})
+		})
+	}
+
+	t.Run("can build composed structs", func(t *testing.T) {
+		b := NewContainerBuilder()
+		b.SetParameter("p1", "hi!")
+		b.SetDefinition("s1", func(c Container) interface{} { return "bye!" })
+		b.SetInjectable("s2", ServiceInject{})
+		b.SetInjectable("p2", ParameterInject{})
+
+		b.SetInjectable("c1", Composed{})
+		c := b.GetContainer()
+		s := c.Get("c1")
+
+		e := Composed{
+			S1: "bye!",
+			P1: "hi!",
+			S2: ServiceInject{F1: "bye!"},
+			P2: ParameterInject{P1: "hi!"},
+		}
+
+		assert.Equal(t, e, s)
+	})
+
 }

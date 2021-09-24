@@ -105,6 +105,8 @@ func (c *container) construct(def *definition, key string) interface{} {
 
 	val := reflect.ValueOf(def.Factory).Call([]reflect.Value{reflect.ValueOf(u)})
 
+	u.loading = u.loading[:len(u.loading)-1]
+
 	return val[0].Interface()
 }
 
