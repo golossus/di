@@ -30,20 +30,6 @@ type Some struct {
 	Val interface{}
 }
 
-//definition represents a service factory definition with additional metadata.
-type definition struct {
-	Factory         func(Container) interface{}
-	Tags            *itemHash
-	Shared, Private bool
-	Priority        int16
-}
-
-//alias represents a service alias identifier and additional metadata.
-type alias struct {
-	Key     string
-	Private bool
-}
-
 //Provider allows to provide definitions into containerBuilder. Some dependencies
 //might not be available during the call to this method.
 type Provider interface {
@@ -80,18 +66,16 @@ type ContainerBuilder interface {
 	HasParameter(key string) bool
 	GetParameter(key string) interface{}
 	SetAlias(key, def string)
-	HasAlias(key string) bool
-	GetAlias(key string) *alias
 	GetTaggedKeys(tag string, values []string) []string
 }
 
 type containerBuilder struct {
-	definitions, parameters, alias *itemHash
-	parser                         *keyParser
-	providers                      []Provider
-	resolvers                      []Resolver
-	resolved                       bool
-	lock                           *sync.Mutex
+	definitions, parameters *itemHash
+	parser                  *keyParser
+	providers               []Provider
+	resolvers               []Resolver
+	resolved                bool
+	lock                    *sync.Mutex
 }
 
 //NewContainerBuilder returns a pointer to a new containerBuilder instance.
@@ -99,7 +83,6 @@ func NewContainerBuilder() *containerBuilder {
 	return &containerBuilder{
 		parameters:  newItemHash(),
 		definitions: newItemHash(),
-		alias:       newItemHash(),
 		parser:      newKeyParser(),
 		providers:   make([]Provider, 0),
 		resolvers:   make([]Resolver, 0),
@@ -192,7 +175,6 @@ func (c *containerBuilder) SetInjectable(key string, i interface{}) {
 
 		if isPtr {
 			return t.Interface()
-
 		}
 
 		return e.Interface()
@@ -210,8 +192,6 @@ func (c *containerBuilder) SetDefinition(key string, factory func(c Container) i
 	c.panicIfResolved()
 
 	k, tags := c.parser.parse(key)
-
-	c.alias.del(k)
 
 	priority := int16(priorityDefault)
 	if tags.Has(tagPriority) {
@@ -234,57 +214,34 @@ func (c *containerBuilder) SetDefinition(key string, factory func(c Container) i
 
 //HasDefinition returns true if definition for the Key exists in the container.
 func (c *containerBuilder) HasDefinition(key string) bool {
-	if c.alias.Has(key) {
-		key = c.alias.Get(key).(*alias).Key
-	}
-
 	return c.definitions.Has(key)
 }
 
 //GetDefinition retrieves a container definition for the Key or panics if not found.
 func (c *containerBuilder) GetDefinition(key string) *definition {
-	if !c.alias.Has(key) {
-		return c.definitions.Get(key).(*definition)
-	}
-	a := c.alias.Get(key).(*alias)
-	d := c.definitions.Get(a.Key).(*definition)
-
-	if d.Private == a.Private {
-		return d
-	}
-
-	return &definition{
-		Factory: d.Factory,
-		Tags:    d.Tags,
-		Private: a.Private,
-	}
+	return c.definitions.Get(key).(*definition)
 }
 
 //SetAlias sets an alias for an existing definition.
 func (c *containerBuilder) SetAlias(key, def string) {
 	c.panicIfResolved()
 
-	k, tags := c.parser.parse(key)
+	k, _ := c.parser.parse(key)
 
 	if !c.definitions.Has(def) {
 		panic(fmt.Sprintf("definition with id '%s' does not exist and alias cannot be set", def))
 	}
 
-	if c.definitions.Has(k) {
+	if c.definitions.Has(k) && c.definitions.Get(k).(*definition).AliasOf == nil {
 		panic(fmt.Sprintf("definition with id '%s' already exists and alias cannot be set", key))
 	}
 
-	c.alias.set(k, &alias{def, tags.Has(tagPrivate)})
-}
+	aliased := c.definitions.Get(def).(*definition)
 
-//HasAlias returns true if given alias Has been set into the container.
-func (c *containerBuilder) HasAlias(key string) bool {
-	return c.alias.Has(key)
-}
+	c.SetDefinition(key, aliased.Factory)
 
-//GetAlias returns the service Key related to given alias Key.
-func (c *containerBuilder) GetAlias(key string) *alias {
-	return c.alias.Get(key).(*alias)
+	alias := c.definitions.Get(k).(*definition)
+	alias.AliasOf = aliased
 }
 
 //AddProvider adds a new service provider.
@@ -355,7 +312,7 @@ func (c *containerBuilder) GetTaggedKeys(tag string, values []string) []string {
 	})
 
 	keys := make([]string, 0, len(tagged))
-	for _, i := range tagged{
+	for _, i := range tagged {
 		keys = append(keys, i.Key)
 	}
 	return keys

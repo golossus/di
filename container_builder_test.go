@@ -14,12 +14,10 @@ func TestNewContainerBuilder_ReturnsInitialised(t *testing.T) {
 	b := NewContainerBuilder()
 	assert.NotNil(t, b.parameters)
 	assert.NotNil(t, b.definitions)
-	assert.NotNil(t, b.alias)
 	assert.NotNil(t, b.providers)
 	assert.NotNil(t, b.parser)
 	assert.Len(t, b.parameters.All(), 0)
 	assert.Len(t, b.definitions.All(), 0)
-	assert.Len(t, b.alias.All(), 0)
 	assert.Len(t, b.providers, 0)
 	assert.False(t, b.resolved)
 }
@@ -135,19 +133,19 @@ func TestContainerBuilder_SetDefinition_RemovesAlias(t *testing.T) {
 
 	b.SetDefinition(key, val)
 	b.SetAlias(alias, key)
-	assert.True(t, b.HasAlias(alias))
 	assert.True(t, b.HasDefinition(alias))
 
-	f := b.GetDefinition(alias).Factory
-	assert.Equal(t, val(&container{}), f(&container{}))
+	k := b.GetDefinition(key)
+	a := b.GetDefinition(alias)
+	assert.Equal(t, k.Factory(&container{}), a.Factory(&container{}))
+	assert.Equal(t, k, a.AliasOf)
 
 	b.SetDefinition(alias, val)
-	assert.True(t, b.HasDefinition(key))
 	assert.True(t, b.HasDefinition(alias))
-	assert.False(t, b.HasAlias(alias))
 
-	f = b.GetDefinition(key).Factory
-	assert.Equal(t, val(&container{}), f(&container{}))
+	a = b.GetDefinition(alias)
+	assert.Equal(t, val(&container{}), a.Factory(&container{}))
+	assert.Nil(t, a.AliasOf)
 }
 
 func TestContainerBuilder_SetDefinition_SuccessWithTags(t *testing.T) {
@@ -211,7 +209,8 @@ func TestContainerBuilder_SetAlias_PanicsIfServiceKeyAlreadyExists(t *testing.T)
 func TestContainerBuilder_SetAlias_Success(t *testing.T) {
 	b := NewContainerBuilder()
 	key := "key1"
-	alias := "alias1"
+	alias := "alias1 #public"
+	finalAlias := "alias1"
 	val := func(c Container) interface{} {
 		return 1
 	}
@@ -219,18 +218,16 @@ func TestContainerBuilder_SetAlias_Success(t *testing.T) {
 	b.SetDefinition(key, val)
 	b.SetAlias(alias, key)
 	assert.True(t, b.HasDefinition(key))
-	assert.True(t, b.HasDefinition(alias))
-	assert.True(t, b.HasAlias(alias))
-	assert.False(t, b.HasAlias(key))
-	assert.Equal(t, b.GetAlias(alias).Key, key)
-	assert.False(t, b.GetAlias(alias).Private, key)
+	assert.True(t, b.HasDefinition(finalAlias))
 
-	d := b.GetDefinition(key).Factory
-	a := b.GetDefinition(alias).Factory
-	assert.Equal(t, d(&container{}), a(&container{}))
+	d := b.GetDefinition(key)
+	a := b.GetDefinition(finalAlias)
+	assert.Equal(t, d.Factory(&container{}), a.Factory(&container{}))
+	assert.Equal(t, d, a.AliasOf)
+	assert.NotEqual(t, d.Tags.All(), a.Tags.All())
 }
 
-func TestContainerBuilder_SetAlias_IgnoresKeyTagsExceptPrivate(t *testing.T) {
+func TestContainerBuilder_SetAlias_HasOwnTags(t *testing.T) {
 	b := NewContainerBuilder()
 	key := "key1"
 	taggedAlias := "alias1 #tag1 #private"
@@ -241,16 +238,17 @@ func TestContainerBuilder_SetAlias_IgnoresKeyTagsExceptPrivate(t *testing.T) {
 
 	b.SetDefinition(key, val)
 	b.SetAlias(taggedAlias, key)
-	assert.False(t, b.HasAlias(taggedAlias))
-	assert.True(t, b.HasAlias(expectedAlias))
 	assert.False(t, b.HasDefinition(taggedAlias))
 	assert.True(t, b.HasDefinition(expectedAlias))
-	assert.Equal(t, b.GetAlias(expectedAlias).Key, key)
-	assert.True(t, b.GetAlias(expectedAlias).Private, key)
 
-	d := b.GetDefinition(key).Factory
-	a := b.GetDefinition(expectedAlias).Factory
-	assert.Equal(t, d(&container{}), a(&container{}))
+	d := b.GetDefinition(key)
+	a := b.GetDefinition(expectedAlias)
+
+	assert.Equal(t, d.Factory(&container{}), a.Factory(&container{}))
+	assert.Equal(t, d, a.AliasOf)
+	assert.True(t, a.Tags.Has("tag1"))
+	assert.True(t, a.Tags.Has("private"))
+
 }
 
 func TestContainerBuilder_AddProvider(t *testing.T) {
@@ -402,7 +400,7 @@ func TestContainerBuilder_SetMany_setsAllTypes(t *testing.T) {
 	assert.True(t, b.HasDefinition("service"))
 	assert.True(t, b.HasDefinition("injectable"))
 	assert.True(t, b.HasParameter("param"))
-	assert.True(t, b.HasAlias("alias"))
+	assert.True(t, b.HasDefinition("alias"))
 }
 
 func TestContainerBuilder_SetInjectable(t *testing.T) {
