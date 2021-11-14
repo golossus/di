@@ -29,11 +29,11 @@ type container struct {
 //service is not found or if the service has been configured as private.
 func (c *container) Get(key string) interface{} {
 	def := c.builder.GetDefinition(key)
-	if c.sealed && def.Private {
+	if c.sealed && def.Private() {
 		panic(fmt.Sprintf("service with key '%s' is private and can't be retrieved from the container", key))
 	}
 
-	if !def.Shared {
+	if !def.Shared() {
 		return c.construct(def, key)
 	}
 
@@ -76,7 +76,7 @@ func (c *container) GetParameter(key string) interface{} {
 //will be removed to have a fresh container.
 func (c *container) MustBuild(dry bool) {
 	for k, d := range c.builder.definitions.All() {
-		if d.(*definition).Private {
+		if d.(*definition).Private() {
 			continue
 		}
 		_ = c.Get(k)

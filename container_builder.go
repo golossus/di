@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 )
@@ -59,13 +58,13 @@ func (f ResolverFunc) Resolve(b ContainerBuilder) {
 //ContainerBuilder interface declares the public api for containerBuilder type.
 type ContainerBuilder interface {
 	SetMany(all ...Some)
-	SetDefinition(key string, factory func(c Container) interface{})
+	SetDefinition(key string, factory func(c Container) interface{}) *definition
 	HasDefinition(key string) bool
 	GetDefinition(key string) *definition
 	SetParameter(key string, value interface{})
 	HasParameter(key string) bool
 	GetParameter(key string) interface{}
-	SetAlias(key, def string)
+	SetAlias(key, def string) *definition
 	GetTaggedKeys(tag string, values []string) []string
 }
 
@@ -131,7 +130,7 @@ func (c *containerBuilder) SetMany(all ...Some) {
 	}
 }
 
-func (c *containerBuilder) SetInjectable(key string, i interface{}) {
+func (c *containerBuilder) SetInjectable(key string, i interface{}) *definition {
 	t := reflect.TypeOf(i)
 	isPtr := false
 	if t.Kind() == reflect.Ptr {
@@ -158,7 +157,7 @@ func (c *containerBuilder) SetInjectable(key string, i interface{}) {
 		fields[j] = k
 	}
 
-	c.SetDefinition(key, func(c Container) interface{} {
+	d := c.SetDefinition(key, func(c Container) interface{} {
 		t := reflect.New(t)
 		e := t.Elem()
 		for i, k := range fields {
@@ -180,6 +179,8 @@ func (c *containerBuilder) SetInjectable(key string, i interface{}) {
 		return e.Interface()
 	})
 
+	return d
+
 }
 
 //SetDefinition adds a new definition to the container referenced by a given
@@ -188,28 +189,15 @@ func (c *containerBuilder) SetInjectable(key string, i interface{}) {
 //definition shared (factory will return a singleton) and private (service will
 //be available to be injected as dependency but not available to be retrieved
 //from current container).
-func (c *containerBuilder) SetDefinition(key string, factory func(c Container) interface{}) {
+func (c *containerBuilder) SetDefinition(key string, factory func(c Container) interface{}) *definition {
 	c.panicIfResolved()
 
 	k, tags := c.parser.parse(key)
 
-	priority := int16(priorityDefault)
-	if tags.Has(tagPriority) {
-		prioValue := tags.Get(tagPriority).(string)
-		parsed, err := strconv.ParseInt(prioValue, 10, 16)
-		if err != nil {
-			panic(fmt.Sprintf("priority value %s is not a valid number", prioValue))
-		}
-		priority = int16(parsed)
-	}
+	d := newDefinition(factory, tags)
+	c.definitions.set(k, d)
 
-	c.definitions.set(k, &definition{
-		Factory:  factory,
-		Tags:     tags,
-		Shared:   tags.Has(tagShared),
-		Private:  tags.Has(tagPrivate),
-		Priority: priority,
-	})
+	return d
 }
 
 //HasDefinition returns true if definition for the Key exists in the container.
@@ -223,7 +211,7 @@ func (c *containerBuilder) GetDefinition(key string) *definition {
 }
 
 //SetAlias sets an alias for an existing definition.
-func (c *containerBuilder) SetAlias(key, def string) {
+func (c *containerBuilder) SetAlias(key, def string) *definition {
 	c.panicIfResolved()
 
 	k, _ := c.parser.parse(key)
@@ -238,10 +226,10 @@ func (c *containerBuilder) SetAlias(key, def string) {
 
 	aliased := c.definitions.Get(def).(*definition)
 
-	c.SetDefinition(key, aliased.Factory)
+	d := c.SetDefinition(key, aliased.Factory)
+	d.AliasOf = aliased
 
-	alias := c.definitions.Get(k).(*definition)
-	alias.AliasOf = aliased
+	return d
 }
 
 //AddProvider adds a new service provider.
