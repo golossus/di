@@ -14,7 +14,6 @@ import (
 type Container interface {
 	Get(key string) interface{}
 	GetTaggedBy(tag string, values ...string) []interface{}
-	GetParameter(key string) interface{}
 }
 
 type container struct {
@@ -64,11 +63,6 @@ func (c *container) GetTaggedBy(tag string, values ...string) []interface{} {
 	}
 
 	return defs
-}
-
-//GetParameter retrieves a container parameter for the Key or panics if not found.
-func (c *container) GetParameter(key string) interface{} {
-	return c.builder.GetParameter(key)
 }
 
 //MustBuild builds all the public services once to discover unexpected panic on runtime. If given

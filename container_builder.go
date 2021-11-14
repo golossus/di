@@ -5,21 +5,19 @@
 package di
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
-	"strings"
 	"sync"
 )
 
 const (
-	tagShared   = "shared"
-	tagPrivate  = "private"
-	tagPriority = "priority"
-	tagInject   = "inject"
-
-	paramPrefix = "_"
+	tagShared    = "shared"
+	tagPrivate   = "private"
+	tagPriority  = "priority"
+	tagInject    = "inject"
+	tagParameter = "parameter"
+	tagAlias     = "alias"
 
 	priorityDefault = 0
 )
@@ -58,29 +56,27 @@ func (f ResolverFunc) Resolve(b ContainerBuilder) {
 //ContainerBuilder interface declares the public api for containerBuilder type.
 type ContainerBuilder interface {
 	SetMany(all ...Some)
-	SetDefinition(key string, factory func(c Container) interface{}) *definition
+	SetFactory(key string, factory func(c Container) interface{}) *definition
+	SetParameter(key string, value interface{}) *definition
+	SetInjectable(key string, value interface{}) *definition
+	SetAlias(key, def string) *definition
 	HasDefinition(key string) bool
 	GetDefinition(key string) *definition
-	SetParameter(key string, value interface{})
-	HasParameter(key string) bool
-	GetParameter(key string) interface{}
-	SetAlias(key, def string) *definition
 	GetTaggedKeys(tag string, values []string) []string
 }
 
 type containerBuilder struct {
-	definitions, parameters *itemHash
-	parser                  *keyParser
-	providers               []Provider
-	resolvers               []Resolver
-	resolved                bool
-	lock                    *sync.Mutex
+	definitions *itemHash
+	parser      *keyParser
+	providers   []Provider
+	resolvers   []Resolver
+	resolved    bool
+	lock        *sync.Mutex
 }
 
 //NewContainerBuilder returns a pointer to a new containerBuilder instance.
 func NewContainerBuilder() *containerBuilder {
 	return &containerBuilder{
-		parameters:  newItemHash(),
 		definitions: newItemHash(),
 		parser:      newKeyParser(),
 		providers:   make([]Provider, 0),
@@ -91,41 +87,29 @@ func NewContainerBuilder() *containerBuilder {
 }
 
 //SetParameter adds a new parameter value to the container on a given Key.
-func (c *containerBuilder) SetParameter(key string, value interface{}) {
+func (c *containerBuilder) SetParameter(key string, value interface{}) *definition {
 	c.panicIfResolved()
 
-	if _, err := json.Marshal(value); err != nil {
-		panic(fmt.Sprintf("invalid parameter param '%#v'", value))
-	}
-
 	k, _ := c.parser.parse(key)
-	c.parameters.set(k, value)
-}
+	d := c.SetFactory(k, func(c Container) interface{} {
+		return value
+	})
 
-//HasParameter returns true if parameter for the Key exists in the container.
-func (c *containerBuilder) HasParameter(key string) bool {
-	return c.parameters.Has(key)
-}
-
-//GetParameter retrieves a container parameter for the Key or panics if not found.
-func (c *containerBuilder) GetParameter(key string) interface{} {
-	return c.parameters.Get(key)
+	return d
 }
 
 func (c *containerBuilder) SetMany(all ...Some) {
 	for _, i := range all {
-		switch i.Val.(type) {
-		case string:
+		_, tags := c.parser.parse(i.Key)
+		switch {
+		case tags.Has(tagAlias):
 			c.SetAlias(i.Key, i.Val.(string))
-		case func(c Container) interface{}:
-			c.SetDefinition(i.Key, i.Val.(func(c Container) interface{}))
-		default:
-			_, tags := c.parser.parse(i.Key)
-			if tags.Has(tagInject) {
-				c.SetInjectable(i.Key, i.Val)
-				continue
-			}
+		case tags.Has(tagParameter):
 			c.SetParameter(i.Key, i.Val)
+		case tags.Has(tagInject):
+			c.SetInjectable(i.Key, i.Val)
+		default:
+			c.SetFactory(i.Key, i.Val.(func(c Container) interface{}))
 		}
 	}
 }
@@ -157,17 +141,11 @@ func (c *containerBuilder) SetInjectable(key string, i interface{}) *definition 
 		fields[j] = k
 	}
 
-	d := c.SetDefinition(key, func(c Container) interface{} {
+	d := c.SetFactory(key, func(c Container) interface{} {
 		t := reflect.New(t)
 		e := t.Elem()
 		for i, k := range fields {
-			var p interface{}
-			if strings.HasPrefix(k, paramPrefix) {
-				p = c.GetParameter(strings.TrimLeft(k, paramPrefix))
-			} else {
-				p = c.Get(k)
-			}
-
+			p := c.Get(k)
 			v := reflect.ValueOf(p)
 			e.Field(i).Set(v)
 		}
@@ -189,7 +167,7 @@ func (c *containerBuilder) SetInjectable(key string, i interface{}) *definition 
 //definition shared (factory will return a singleton) and private (service will
 //be available to be injected as dependency but not available to be retrieved
 //from current container).
-func (c *containerBuilder) SetDefinition(key string, factory func(c Container) interface{}) *definition {
+func (c *containerBuilder) SetFactory(key string, factory func(c Container) interface{}) *definition {
 	c.panicIfResolved()
 
 	k, tags := c.parser.parse(key)
@@ -226,7 +204,7 @@ func (c *containerBuilder) SetAlias(key, def string) *definition {
 
 	aliased := c.definitions.Get(def).(*definition)
 
-	d := c.SetDefinition(key, aliased.Factory)
+	d := c.SetFactory(key, aliased.Factory)
 	d.AliasOf = aliased
 
 	return d

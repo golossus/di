@@ -27,10 +27,10 @@ func ExampleContainer_basicUsage() {
 
 	b.SetParameter("counter.increment", 2)
 
-	b.SetDefinition("counter.current", func(c di.Container) interface{} {
+	b.SetFactory("counter.current", func(c di.Container) interface{} {
 		return &Counter{
 			count:     0,
-			increment: c.GetParameter("counter.increment").(int),
+			increment: c.Get("counter.increment").(int),
 		}
 	})
 
@@ -56,10 +56,10 @@ func ExampleContainer_sharedService() {
 	b.SetParameter("counter.increment", 2)
 
 	//#shared is a reserved tag to declare singletons
-	b.SetDefinition("counter.current #shared", func(c di.Container) interface{} {
+	b.SetFactory("counter.current #shared", func(c di.Container) interface{} {
 		return &Counter{
 			count:     0,
-			increment: c.GetParameter("counter.increment").(int),
+			increment: c.Get("counter.increment").(int),
 		}
 	})
 

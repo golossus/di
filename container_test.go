@@ -14,7 +14,7 @@ func TestContainer_Get_BuildsService(t *testing.T) {
 	k := "one"
 
 	b := NewContainerBuilder()
-	b.SetDefinition(k, f)
+	b.SetFactory(k, f)
 	c := b.GetContainer()
 
 	r := c.Get(k).(int)
@@ -24,11 +24,11 @@ func TestContainer_Get_BuildsService(t *testing.T) {
 
 func TestContainer_Get_BuildsParameterDependencies(t *testing.T) {
 	f := func(cb Container) interface{} {
-		return cb.GetParameter("one").(int)
+		return cb.Get("one").(int)
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("one", f)
+	b.SetFactory("one", f)
 	b.SetParameter("one", 1)
 	c := b.GetContainer()
 
@@ -47,8 +47,8 @@ func TestContainer_Get_BuildsDefinitionDependencies(t *testing.T) {
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("one", f)
-	b.SetDefinition("two", newTwo)
+	b.SetFactory("one", f)
+	b.SetFactory("two", newTwo)
 	b.SetParameter("one", 1)
 	c := b.GetContainer()
 
@@ -69,8 +69,8 @@ func TestContainer_Get_CreatesSingleInstanceForSharedService(t *testing.T) {
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("shared #shared", shared)
-	b.SetDefinition("other", other)
+	b.SetFactory("shared #shared", shared)
+	b.SetFactory("other", other)
 	c := b.GetContainer()
 
 	r1 := c.Get("shared").(int)
@@ -90,7 +90,7 @@ func TestContainer_Get_CreatesNewInstancesForNotSharedService(t *testing.T) {
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("a", newA)
+	b.SetFactory("a", newA)
 	c := b.GetContainer()
 
 	r1 := c.Get("a").(int)
@@ -110,7 +110,7 @@ func TestContainer_Get_PanicsIfRequestingPrivateService(t *testing.T) {
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("a #private", newA)
+	b.SetFactory("a #private", newA)
 	c := b.GetContainer()
 
 	assert.PanicsWithValue(t, "service with key 'a' is private and can't be retrieved from the container", func() {
@@ -123,7 +123,7 @@ func TestContainer_Get_PanicsIfRequestingPrivateAlias(t *testing.T) {
 	newA := func(cb Container) interface{} { spy++; return spy }
 
 	b := NewContainerBuilder()
-	b.SetDefinition("a", newA)
+	b.SetFactory("a", newA)
 	b.SetAlias("a_alias #private", "a")
 	c := b.GetContainer()
 
@@ -137,7 +137,7 @@ func TestContainer_Get_RetrievesPrivateServiceThroughPublicAlias(t *testing.T) {
 	newA := func(cb Container) interface{} { spy++; return spy }
 
 	b := NewContainerBuilder()
-	b.SetDefinition("a #private ", newA)
+	b.SetFactory("a #private ", newA)
 	b.SetAlias("a_alias", "a")
 	c := b.GetContainer()
 
@@ -160,9 +160,9 @@ func TestContainer_Get_CanCreateWithPrivateDependency(t *testing.T) {
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("public", public)
-	b.SetDefinition("public2", public2)
-	b.SetDefinition("private #private", private)
+	b.SetFactory("public", public)
+	b.SetFactory("public2", public2)
+	b.SetFactory("private #private", private)
 	c := b.GetContainer()
 
 	r := c.Get("public").(int)
@@ -184,9 +184,9 @@ func TestContainer_Get_CanCreateWithPrivateAliasDependency(t *testing.T) {
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("public", public)
-	b.SetDefinition("public2", public2)
-	b.SetDefinition("private #private", private)
+	b.SetFactory("public", public)
+	b.SetFactory("public2", public2)
+	b.SetFactory("private #private", private)
 	b.SetAlias("private_alias #private", "private")
 	c := b.GetContainer()
 
@@ -219,11 +219,11 @@ func TestContainer_Get_CanCreateWithPrivateTaggedDependencies(t *testing.T) {
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("plus1", plus1)
-	b.SetDefinition("sum #private", sum)
-	b.SetDefinition("tagged1 #sum", tagged1)
-	b.SetDefinition("tagged2 #sum #shared #private", tagged2)
-	b.SetDefinition("tagged3 #sum #private", tagged3)
+	b.SetFactory("plus1", plus1)
+	b.SetFactory("sum #private", sum)
+	b.SetFactory("tagged1 #sum", tagged1)
+	b.SetFactory("tagged2 #sum #shared #private", tagged2)
+	b.SetFactory("tagged3 #sum #private", tagged3)
 	c := b.GetContainer()
 
 	r := c.Get("plus1").(int)
@@ -237,9 +237,9 @@ func TestContainer_Get_PanicsIfCircularReference(t *testing.T) {
 	s3 := func(cb Container) interface{} { return cb.Get("s1").(int) }
 
 	b := NewContainerBuilder()
-	b.SetDefinition("s1", s1)
-	b.SetDefinition("s2", s2)
-	b.SetDefinition("s3", s3)
+	b.SetFactory("s1", s1)
+	b.SetFactory("s2", s2)
+	b.SetFactory("s3", s3)
 	c := b.GetContainer()
 
 	assert.PanicsWithValue(t, "circular reference found while building service 's1' at service 's3'", func() {
@@ -254,9 +254,9 @@ func TestContainer_GetTaggedBy(t *testing.T) {
 
 	t.Run("retrieves services ordered by priority", func(t *testing.T) {
 		b := NewContainerBuilder()
-		b.SetDefinition("tagged1 #sum #priority=1", tagged1)
-		b.SetDefinition("tagged2 #sum", tagged2)
-		b.SetDefinition("tagged3 #sum #priority=2", tagged3)
+		b.SetFactory("tagged1 #sum #priority=1", tagged1)
+		b.SetFactory("tagged2 #sum", tagged2)
+		b.SetFactory("tagged3 #sum #priority=2", tagged3)
 
 		c := b.GetContainer()
 
@@ -281,9 +281,9 @@ func TestContainer_GetTaggedBy_PanicsIfSomeServiceIsPrivate(t *testing.T) {
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("tagged1 #sum", tagged1)
-	b.SetDefinition("tagged2 #sum #shared", tagged2)
-	b.SetDefinition("tagged3 #sum #private", tagged3)
+	b.SetFactory("tagged1 #sum", tagged1)
+	b.SetFactory("tagged2 #sum #shared", tagged2)
+	b.SetFactory("tagged3 #sum #private", tagged3)
 	c := b.GetContainer()
 
 	assert.PanicsWithValue(t, "service with key 'tagged3' is private and can't be retrieved from the container", func() {
@@ -297,9 +297,9 @@ func TestContainer_GetTaggedBy_PanicsIfCircularReferenceUsedForDependencies(t *t
 	s3 := func(cb Container) interface{} { return cb.Get("s1").(int) }
 
 	b := NewContainerBuilder()
-	b.SetDefinition("s1", s1)
-	b.SetDefinition("s2 #tag", s2)
-	b.SetDefinition("s3 #tag", s3)
+	b.SetFactory("s1", s1)
+	b.SetFactory("s2 #tag", s2)
+	b.SetFactory("s3 #tag", s3)
 	c := b.GetContainer()
 
 	assert.PanicsWithValue(t, "circular reference found while building service 's1' at service 's3'", func() {
@@ -313,9 +313,9 @@ func TestContainer_GetTaggedBy_PanicsIfCircularReference(t *testing.T) {
 	s3 := func(cb Container) interface{} { return cb.Get("s1").(int) }
 
 	b := NewContainerBuilder()
-	b.SetDefinition("s1", s1)
-	b.SetDefinition("s2 #tag=2", s2)
-	b.SetDefinition("s3 #tag=3", s3)
+	b.SetFactory("s1", s1)
+	b.SetFactory("s2 #tag=2", s2)
+	b.SetFactory("s3 #tag=3", s3)
 	c := b.GetContainer()
 
 	assert.PanicsWithValue(t, "circular reference found while building service 's3' at service 's2'", func() {
@@ -335,7 +335,7 @@ func TestContainer_Get_SharedServiceIfConcurrentAccess(t *testing.T) {
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("s1 #shared", s1)
+	b.SetFactory("s1 #shared", s1)
 	c := b.GetContainer()
 
 	for i := 0; i < 1000; i++ {
@@ -355,8 +355,8 @@ func TestContainer_MustBuild_panicsOnInvalidService(t *testing.T) {
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("s1", s1)
-	b.SetDefinition("s2", s2)
+	b.SetFactory("s1", s1)
+	b.SetFactory("s2", s2)
 
 	c := b.GetContainer()
 
@@ -376,8 +376,8 @@ func TestContainer_MustBuild_doesNotPanicAndClearsInstancesIfAllValid(t *testing
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("s1", s1)
-	b.SetDefinition("s2", s2)
+	b.SetFactory("s1", s1)
+	b.SetFactory("s2", s2)
 	c := b.GetContainer()
 
 	c.MustBuild(true)
@@ -396,8 +396,8 @@ func TestContainer_MustBuild_doesNotPanicAndDoesNotClearInstancesIfAllValid(t *t
 	}
 
 	b := NewContainerBuilder()
-	b.SetDefinition("s1", s1)
-	b.SetDefinition("s2 #shared #private", s2)
+	b.SetFactory("s1", s1)
+	b.SetFactory("s2 #shared #private", s2)
 	c := b.GetContainer()
 
 	c.MustBuild(false)

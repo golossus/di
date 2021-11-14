@@ -5,18 +5,15 @@
 package di
 
 import (
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
 func TestNewContainerBuilder_ReturnsInitialised(t *testing.T) {
 	b := NewContainerBuilder()
-	assert.NotNil(t, b.parameters)
 	assert.NotNil(t, b.definitions)
 	assert.NotNil(t, b.providers)
 	assert.NotNil(t, b.parser)
-	assert.Len(t, b.parameters.All(), 0)
 	assert.Len(t, b.definitions.All(), 0)
 	assert.Len(t, b.providers, 0)
 	assert.False(t, b.resolved)
@@ -43,9 +40,10 @@ func TestContainerBuilder_SetParameter_IfValidValue(t *testing.T) {
 		t.Run(key, func(t *testing.T) {
 			b := NewContainerBuilder()
 			b.SetParameter(key, val)
+			c := b.GetContainer()
 
-			assert.True(t, b.HasParameter(key))
-			assert.Equal(t, val, b.GetParameter(key))
+			assert.True(t, b.HasDefinition(key))
+			assert.Equal(t, val, b.GetDefinition(key).Factory(c))
 		})
 	}
 }
@@ -57,19 +55,11 @@ func TestContainerBuilder_SetParameter_IgnoresKeyTags(t *testing.T) {
 
 	b := NewContainerBuilder()
 	b.SetParameter(key, val)
+	c := b.GetContainer()
 
-	assert.False(t, b.HasParameter(key))
-	assert.True(t, b.HasParameter(keyParsed))
-	assert.Equal(t, val, b.GetParameter(keyParsed))
-}
-
-func TestContainerBuilder_SetParameter_PanicsIfInvalidParameterValue(t *testing.T) {
-	b := NewContainerBuilder()
-	param := make(chan int)
-
-	assert.PanicsWithValue(t, fmt.Sprintf("invalid parameter param '%#v'", param), func() {
-		b.SetParameter("id", param)
-	})
+	assert.False(t, b.HasDefinition(key))
+	assert.True(t, b.HasDefinition(keyParsed))
+	assert.Equal(t, val, b.GetDefinition(keyParsed).Factory(c))
 }
 
 func TestContainerBuilder_SetParameter_PanicsIfResolved(t *testing.T) {
@@ -91,7 +81,7 @@ func TestContainerBuilder_SetDefinition_PanicsIfResolved(t *testing.T) {
 	}
 
 	assert.PanicsWithValue(t, "container is resolved and new items can not be set", func() {
-		b.SetDefinition(key, val)
+		b.SetFactory(key, val)
 	})
 }
 
@@ -102,7 +92,7 @@ func TestContainerBuilder_SetDefinition_Success(t *testing.T) {
 		return 1
 	}
 
-	b.SetDefinition(key, val)
+	b.SetFactory(key, val)
 	assert.True(t, b.HasDefinition(key))
 
 	f := b.GetDefinition(key).Factory
@@ -116,7 +106,7 @@ func TestContainerBuilder_SetDefinition_SuccessIfConstructorHasNoArgument(t *tes
 		return 1
 	}
 
-	b.SetDefinition(key, val)
+	b.SetFactory(key, val)
 	assert.True(t, b.HasDefinition(key))
 
 	f := b.GetDefinition(key).Factory
@@ -131,7 +121,7 @@ func TestContainerBuilder_SetDefinition_RemovesAlias(t *testing.T) {
 		return 1
 	}
 
-	b.SetDefinition(key, val)
+	b.SetFactory(key, val)
 	b.SetAlias(alias, key)
 	assert.True(t, b.HasDefinition(alias))
 
@@ -140,7 +130,7 @@ func TestContainerBuilder_SetDefinition_RemovesAlias(t *testing.T) {
 	assert.Equal(t, k.Factory(&container{}), a.Factory(&container{}))
 	assert.Equal(t, k, a.AliasOf)
 
-	b.SetDefinition(alias, val)
+	b.SetFactory(alias, val)
 	assert.True(t, b.HasDefinition(alias))
 
 	a = b.GetDefinition(alias)
@@ -155,7 +145,7 @@ func TestContainerBuilder_SetDefinition_SuccessWithTags(t *testing.T) {
 		return 1
 	}
 
-	b.SetDefinition(key, val)
+	b.SetFactory(key, val)
 	assert.False(t, b.HasDefinition(key))
 	assert.True(t, b.HasDefinition("key1"))
 
@@ -199,7 +189,7 @@ func TestContainerBuilder_SetAlias_PanicsIfServiceKeyAlreadyExists(t *testing.T)
 	val := func(c Container) interface{} {
 		return 1
 	}
-	b.SetDefinition(def, val)
+	b.SetFactory(def, val)
 
 	assert.PanicsWithValue(t, "definition with id 'key1' already exists and alias cannot be set", func() {
 		b.SetAlias(key, def)
@@ -215,7 +205,7 @@ func TestContainerBuilder_SetAlias_Success(t *testing.T) {
 		return 1
 	}
 
-	b.SetDefinition(key, val)
+	b.SetFactory(key, val)
 	b.SetAlias(alias, key)
 	assert.True(t, b.HasDefinition(key))
 	assert.True(t, b.HasDefinition(finalAlias))
@@ -236,7 +226,7 @@ func TestContainerBuilder_SetAlias_HasOwnTags(t *testing.T) {
 		return 1
 	}
 
-	b.SetDefinition(key, val)
+	b.SetFactory(key, val)
 	b.SetAlias(taggedAlias, key)
 	assert.False(t, b.HasDefinition(taggedAlias))
 	assert.True(t, b.HasDefinition(expectedAlias))
@@ -339,9 +329,9 @@ func TestContainerBuilder_GetTaggedKeys(t *testing.T) {
 	val3 := func(_ Container) interface{} { return 3 }
 
 	b := NewContainerBuilder()
-	b.SetDefinition(key1, val1)
-	b.SetDefinition(key2, val2)
-	b.SetDefinition(key3, val3)
+	b.SetFactory(key1, val1)
+	b.SetFactory(key2, val2)
+	b.SetFactory(key3, val3)
 
 	ds := b.GetTaggedKeys("tag", []string{})
 	assert.Subset(t, []string{"key1", "key2"}, ds)
@@ -363,12 +353,12 @@ func TestContainerBuilder_GetContainer_IfConcurrent(t *testing.T) {
 	*init = 0
 
 	p := ProviderFunc(func(b ContainerBuilder) {
-		b.SetDefinition("s1", func(cb Container) interface{} {
+		b.SetFactory("s1", func(cb Container) interface{} {
 			return false
 		})
 
 		if *init == 1 {
-			b.SetDefinition("s1", func(cb Container) interface{} {
+			b.SetFactory("s1", func(cb Container) interface{} {
 				return true
 			})
 		}
@@ -390,16 +380,16 @@ func TestContainerBuilder_SetMany_setsAllTypes(t *testing.T) {
 	b := NewContainerBuilder()
 	b.SetMany([]Some{
 		{Key: "service #private", Val: func(c Container) interface{} {
-			return c.GetParameter("param").(int)
+			return c.Get("param").(int)
 		}},
-		{Key: "param", Val: 1},
-		{Key: "alias", Val: "service"},
+		{Key: "param #parameter", Val: 1},
+		{Key: "alias #alias", Val: "service"},
 		{Key: "injectable #inject", Val: struct{}{}},
 	}...)
 
 	assert.True(t, b.HasDefinition("service"))
 	assert.True(t, b.HasDefinition("injectable"))
-	assert.True(t, b.HasParameter("param"))
+	assert.True(t, b.HasDefinition("param"))
 	assert.True(t, b.HasDefinition("alias"))
 }
 
@@ -412,7 +402,7 @@ func TestContainerBuilder_SetInjectable(t *testing.T) {
 		F1 string `inject:"s1"`
 	}
 	type ParameterInject struct {
-		P1 string `inject:"_p1"`
+		P1 string `inject:"p1"`
 	}
 	type UnexportedField struct {
 		f1 string `inject:"s1"`
@@ -422,7 +412,7 @@ func TestContainerBuilder_SetInjectable(t *testing.T) {
 	}
 	type Composed struct {
 		S1 string          `inject:"s1"`
-		P1 string          `inject:"_p1"`
+		P1 string          `inject:"p1"`
 		S2 ServiceInject   `inject:"s2"`
 		P2 ParameterInject `inject:"p2"`
 	}
@@ -441,7 +431,7 @@ func TestContainerBuilder_SetInjectable(t *testing.T) {
 		t.Run(data.name, func(t *testing.T) {
 			b := NewContainerBuilder()
 			b.SetParameter("p1", "hi!")
-			b.SetDefinition("s1", func(c Container) interface{} { return "bye!" })
+			b.SetFactory("s1", func(c Container) interface{} { return "bye!" })
 
 			b.SetInjectable("i1", data.value)
 			c := b.GetContainer()
@@ -461,7 +451,7 @@ func TestContainerBuilder_SetInjectable(t *testing.T) {
 		t.Run(data.name, func(t *testing.T) {
 			b := NewContainerBuilder()
 			b.SetParameter("p1", "hi!")
-			b.SetDefinition("s1", func(c Container) interface{} { return "bye!" })
+			b.SetFactory("s1", func(c Container) interface{} { return "bye!" })
 
 			assert.Panics(t, func() {
 				b.SetInjectable("i1", data.value)
@@ -472,7 +462,7 @@ func TestContainerBuilder_SetInjectable(t *testing.T) {
 	t.Run("can build composed structs", func(t *testing.T) {
 		b := NewContainerBuilder()
 		b.SetParameter("p1", "hi!")
-		b.SetDefinition("s1", func(c Container) interface{} { return "bye!" })
+		b.SetFactory("s1", func(c Container) interface{} { return "bye!" })
 		b.SetInjectable("s2", ServiceInject{})
 		b.SetInjectable("p2", ParameterInject{})
 
