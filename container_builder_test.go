@@ -150,8 +150,8 @@ func TestContainerBuilder_SetDefinition_SuccessWithTags(t *testing.T) {
 	assert.True(t, b.HasDefinition("key1"))
 
 	d := b.GetDefinition("key1")
-	assert.True(t, d.Private())
-	assert.True(t, d.Shared())
+	assert.True(t, d.Private)
+	assert.True(t, d.Shared)
 	assert.True(t, d.Tags.Has("other"))
 
 	f := d.Factory

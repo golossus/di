@@ -18,8 +18,6 @@ const (
 	tagInject    = "inject"
 	tagParameter = "parameter"
 	tagAlias     = "alias"
-
-	priorityDefault = 0
 )
 
 type Some struct {

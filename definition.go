@@ -11,34 +11,59 @@ import (
 
 //definition represents a service factory definition with additional metadata.
 type definition struct {
-	Factory         func(Container) interface{}
-	Tags            *itemHash
-	Priority        int16
-	AliasOf         *definition
+	Factory  func(Container) interface{}
+	Tags     *itemHash
+	AliasOf  *definition
+	Priority int16
+	Shared   bool
+	Private  bool
 }
 
-func newDefinition(factory func(c Container) interface{}, tags *itemHash ) *definition {
-	priority := int16(priorityDefault)
-	if tags.Has(tagPriority) {
-		raw := tags.Get(tagPriority).(string)
-		parsed, err := strconv.ParseInt(raw, 10, 16)
-		if err != nil {
-			panic(fmt.Sprintf("priority value %s is not a valid number", raw))
-		}
-		priority = int16(parsed)
-	}
-
+//newDefinition returns a new definition pointer
+func newDefinition(factory func(c Container) interface{}, tags *itemHash) *definition {
 	return &definition{
 		Factory:  factory,
 		Tags:     tags,
-		Priority: priority,
-	};
+		Priority: parseIntegerTag(tagPriority, tags),
+		Shared:   parseBoolTag(tagShared, tags),
+		Private:  parseBoolTag(tagPrivate, tags),
+	}
 }
 
-func (d definition) Shared() bool {
-	return d.Tags.Has(tagShared)
+//parseBoolTag looks for a given tag name in tags and returns the corresponding boolean value
+func parseBoolTag(tagName string, tags *itemHash) bool {
+	if !tags.Has(tagName) {
+		return false
+	}
+
+	raw := tags.Get(tagName).(string)
+	if "" == raw {
+		return true
+	}
+
+	parsed, err := strconv.ParseBool(raw)
+	if err != nil {
+		panic(fmt.Sprintf("%s tag value '%s' is not a valid boolean", tagName, raw))
+	}
+	return parsed
 }
 
-func (d definition) Private() bool {
-	return d.Tags.Has(tagPrivate)
+//parseIntegerTag looks for a given tag name in tags and returns the corresponding int16 value
+func parseIntegerTag(tagName string, tags *itemHash) int16 {
+	var i int16 = 0
+	if !tags.Has(tagName) {
+		return i
+	}
+
+	raw := tags.Get(tagName).(string)
+	if "" == raw {
+		return i
+	}
+
+	parsed, err := strconv.ParseInt(raw, 10, 16)
+	if err != nil {
+		panic(fmt.Sprintf("%s tag value '%s' is not a valid number", tagName, raw))
+	}
+
+	return int16(parsed)
 }
