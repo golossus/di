@@ -25,7 +25,7 @@ func ExampleContainer_basicUsage() {
 
 	b := di.NewContainerBuilder()
 
-	b.SetParameter("counter.increment", 2)
+	b.SetValue("counter.increment", 2)
 
 	b.SetFactory("counter.current", func(c di.Container) interface{} {
 		return &Counter{
@@ -53,7 +53,7 @@ func ExampleContainer_sharedService() {
 
 	b := di.NewContainerBuilder()
 
-	b.SetParameter("counter.increment", 2)
+	b.SetValue("counter.increment", 2)
 
 	//#shared is a reserved tag to declare singletons
 	b.SetFactory("counter.current #shared", func(c di.Container) interface{} {

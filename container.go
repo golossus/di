@@ -10,7 +10,7 @@ import (
 	"sync"
 )
 
-//Container is the public container interface, used mainly on service factories.
+// Container is the public container interface, used mainly on service factories.
 type Container interface {
 	Get(key string) interface{}
 	GetTaggedBy(tag string, values ...string) []interface{}
@@ -24,8 +24,8 @@ type container struct {
 	lock      *sync.Mutex
 }
 
-//Get will retrieve a service form the container by a given key. It will panic if
-//service is not found or if the service has been configured as private.
+// Get will retrieve a service form the container by a given key. It will panic if
+// service is not found or if the service has been configured as private.
 func (c *container) Get(key string) interface{} {
 	def := c.builder.GetDefinition(key)
 	if c.sealed && def.Private {
@@ -51,10 +51,10 @@ func (c *container) Get(key string) interface{} {
 	return s
 }
 
-//GetTaggedBy returns all services related to a given tag. If values provided, then
-//only the services which match with tag and value will be returned. Services are
-//sorted by priority defined with the #priotity tag. If not defined, priority is
-//zero. Services with higher priority are returned first.
+// GetTaggedBy returns all services related to a given tag. If values provided, then
+// only the services which match with tag and value will be returned. Services are
+// sorted by priority defined with the #priotity tag. If not defined, priority is
+// zero. Services with higher priority are returned first.
 func (c *container) GetTaggedBy(tag string, values ...string) []interface{} {
 	keys := c.builder.GetTaggedKeys(tag, values)
 	defs := make([]interface{}, 0, len(keys))
@@ -65,9 +65,9 @@ func (c *container) GetTaggedBy(tag string, values ...string) []interface{} {
 	return defs
 }
 
-//MustBuild builds all the public services once to discover unexpected panic on runtime. If given
-//true as parameter, singleton services instances will be preserved. On the contrary, any service
-//will be removed to have a fresh container.
+// MustBuild builds all the public services once to discover unexpected panic on runtime. If given
+// true as parameter, singleton services instances will be preserved. On the contrary, any service
+// will be removed to have a fresh container.
 func (c *container) MustBuild(dry bool) {
 	for k, d := range c.builder.definitions.All() {
 		if d.(*definition).Private {

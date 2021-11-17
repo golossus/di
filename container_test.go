@@ -29,7 +29,7 @@ func TestContainer_Get_BuildsParameterDependencies(t *testing.T) {
 
 	b := NewContainerBuilder()
 	b.SetFactory("one", f)
-	b.SetParameter("one", 1)
+	b.SetValue("one", 1)
 	c := b.GetContainer()
 
 	r := c.Get("one").(int)
@@ -49,7 +49,7 @@ func TestContainer_Get_BuildsDefinitionDependencies(t *testing.T) {
 	b := NewContainerBuilder()
 	b.SetFactory("one", f)
 	b.SetFactory("two", newTwo)
-	b.SetParameter("one", 1)
+	b.SetValue("one", 1)
 	c := b.GetContainer()
 
 	r := c.Get("one").(int)

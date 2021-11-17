@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-//definition represents a service factory definition with additional metadata.
+// definition represents a service factory definition with additional metadata.
 type definition struct {
 	Factory  func(Container) interface{}
 	Tags     *itemHash
@@ -19,7 +19,7 @@ type definition struct {
 	Private  bool
 }
 
-//newDefinition returns a new definition pointer
+// newDefinition returns a new definition pointer
 func newDefinition(factory func(c Container) interface{}, tags *itemHash) *definition {
 	return &definition{
 		Factory:  factory,
@@ -30,7 +30,7 @@ func newDefinition(factory func(c Container) interface{}, tags *itemHash) *defin
 	}
 }
 
-//parseBoolTag looks for a given tag name in tags and returns the corresponding boolean value
+// parseBoolTag looks for a given tag name in tags and returns the corresponding boolean value
 func parseBoolTag(tagName string, tags *itemHash) bool {
 	if !tags.Has(tagName) {
 		return false
@@ -48,7 +48,7 @@ func parseBoolTag(tagName string, tags *itemHash) bool {
 	return parsed
 }
 
-//parseIntegerTag looks for a given tag name in tags and returns the corresponding int16 value
+// parseIntegerTag looks for a given tag name in tags and returns the corresponding int16 value
 func parseIntegerTag(tagName string, tags *itemHash) int16 {
 	var i int16 = 0
 	if !tags.Has(tagName) {

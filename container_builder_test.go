@@ -39,7 +39,7 @@ func TestContainerBuilder_SetParameter_IfValidValue(t *testing.T) {
 	for key, val := range data {
 		t.Run(key, func(t *testing.T) {
 			b := NewContainerBuilder()
-			b.SetParameter(key, val)
+			b.SetValue(key, val)
 			c := b.GetContainer()
 
 			assert.True(t, b.HasDefinition(key))
@@ -54,7 +54,7 @@ func TestContainerBuilder_SetParameter_IgnoresKeyTags(t *testing.T) {
 	val := 1
 
 	b := NewContainerBuilder()
-	b.SetParameter(key, val)
+	b.SetValue(key, val)
 	c := b.GetContainer()
 
 	assert.False(t, b.HasDefinition(key))
@@ -67,7 +67,7 @@ func TestContainerBuilder_SetParameter_PanicsIfResolved(t *testing.T) {
 	b.resolved = true
 
 	assert.PanicsWithValue(t, "container is resolved and new items can not be set", func() {
-		b.SetParameter("id", 1)
+		b.SetValue("id", 1)
 	})
 }
 
@@ -376,15 +376,15 @@ func TestContainerBuilder_GetContainer_IfConcurrent(t *testing.T) {
 	}
 }
 
-func TestContainerBuilder_SetMany_setsAllTypes(t *testing.T) {
+func TestContainerBuilder_SetAll(t *testing.T) {
 	b := NewContainerBuilder()
-	b.SetMany([]Some{
-		{Key: "service #private", Val: func(c Container) interface{} {
+	b.SetAll([]Binding{
+		{Key: "service #private", Target: func(c Container) interface{} {
 			return c.Get("param").(int)
 		}},
-		{Key: "param #parameter", Val: 1},
-		{Key: "alias #alias", Val: "service"},
-		{Key: "injectable #inject", Val: struct{}{}},
+		{Key: "param #value", Target: 1},
+		{Key: "alias #alias", Target: "service"},
+		{Key: "injectable #inject", Target: struct{}{}},
 	}...)
 
 	assert.True(t, b.HasDefinition("service"))
@@ -430,7 +430,7 @@ func TestContainerBuilder_SetInjectable(t *testing.T) {
 	} {
 		t.Run(data.name, func(t *testing.T) {
 			b := NewContainerBuilder()
-			b.SetParameter("p1", "hi!")
+			b.SetValue("p1", "hi!")
 			b.SetFactory("s1", func(c Container) interface{} { return "bye!" })
 
 			b.SetInjectable("i1", data.value)
@@ -444,16 +444,18 @@ func TestContainerBuilder_SetInjectable(t *testing.T) {
 	for _, data := range []struct {
 		name  string
 		value interface{}
+		error  string
 	}{
-		{"panics if unexported field to inject", UnexportedField{f1: ""}},
-		{"panics if empty injection key", EmptyInjectKey{}},
+		{"panics if not a struct", "dummy", "invalid injectable for key i1, only structs can be injectables"},
+		{"panics if unexported field to inject", UnexportedField{f1: ""}, "unexported field github.com/golossus/di/f1 can not be injected"},
+		{"panics if empty injection key", EmptyInjectKey{}, "no injection key present for field EmptyInjectKey: F1"},
 	} {
 		t.Run(data.name, func(t *testing.T) {
 			b := NewContainerBuilder()
-			b.SetParameter("p1", "hi!")
+			b.SetValue("p1", "hi!")
 			b.SetFactory("s1", func(c Container) interface{} { return "bye!" })
 
-			assert.Panics(t, func() {
+			assert.PanicsWithValue(t, data.error, func() {
 				b.SetInjectable("i1", data.value)
 			})
 		})
@@ -461,7 +463,7 @@ func TestContainerBuilder_SetInjectable(t *testing.T) {
 
 	t.Run("can build composed structs", func(t *testing.T) {
 		b := NewContainerBuilder()
-		b.SetParameter("p1", "hi!")
+		b.SetValue("p1", "hi!")
 		b.SetFactory("s1", func(c Container) interface{} { return "bye!" })
 		b.SetInjectable("s2", ServiceInject{})
 		b.SetInjectable("p2", ParameterInject{})
