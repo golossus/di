@@ -5,12 +5,9 @@
 package di
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
-	"strconv"
-	"strings"
 	"sync"
 )
 
@@ -19,87 +16,69 @@ const (
 	tagPrivate  = "private"
 	tagPriority = "priority"
 	tagInject   = "inject"
-
-	paramPrefix = "_"
-
-	priorityDefault = 0
+	tagValue    = "value"
+	tagAlias    = "alias"
+	tagFactory  = "factory"
 )
 
-type Some struct {
-	Key string
-	Val interface{}
+type Binding struct {
+	Key    string
+	Target interface{}
 }
 
-//definition represents a service factory definition with additional metadata.
-type definition struct {
-	Factory         func(Container) interface{}
-	Tags            *itemHash
-	Shared, Private bool
-	Priority        int16
-}
-
-//alias represents a service alias identifier and additional metadata.
-type alias struct {
-	Key     string
-	Private bool
-}
-
-//Provider allows to provide definitions into containerBuilder. Some dependencies
-//might not be available during the call to this method.
+// Provider allows to provide definitions into containerBuilder. Binding dependencies
+// might not be available yet during the call to this method.
 type Provider interface {
 	Provide(builder ContainerBuilder)
 }
 
-//ProviderFunc adapts a normal func into a Provider.
+// ProviderFunc adapts a normal func into a Provider.
 type ProviderFunc func(ContainerBuilder)
 
 func (f ProviderFunc) Provide(b ContainerBuilder) {
 	f(b)
 }
 
-//Resolver allows to resolve definitions into containerBuilder once All services
-//definitions are available.
+// Resolver allows to resolve definitions into containerBuilder once All services
+// definitions are available.
 type Resolver interface {
 	Resolve(builder ContainerBuilder)
 }
 
-//ProviderFunc adapts a normal func into a Resolver.
+// ResolverFunc adapts a normal func into a Resolver.
 type ResolverFunc func(ContainerBuilder)
 
 func (f ResolverFunc) Resolve(b ContainerBuilder) {
 	f(b)
 }
 
-//ContainerBuilder interface declares the public api for containerBuilder type.
+// ContainerBuilder interface declares the public api for containerBuilder type.
 type ContainerBuilder interface {
-	SetMany(all ...Some)
-	SetDefinition(key string, factory func(c Container) interface{})
+	SetAll(all ...Binding)
+	SetValue(key string, value interface{}) *definition
+	SetFactory(key string, factory interface{}) *definition
+	SetInjectable(key string, value interface{}) *definition
+	SetAlias(key, def string) *definition
 	HasDefinition(key string) bool
 	GetDefinition(key string) *definition
-	SetParameter(key string, value interface{})
-	HasParameter(key string) bool
-	GetParameter(key string) interface{}
-	SetAlias(key, def string)
-	HasAlias(key string) bool
-	GetAlias(key string) *alias
 	GetTaggedKeys(tag string, values []string) []string
 }
 
+// containerBuilder implements ContainerBuilder interface to bind service definitions
+// and resolve the final service container.
 type containerBuilder struct {
-	definitions, parameters, alias *itemHash
-	parser                         *keyParser
-	providers                      []Provider
-	resolvers                      []Resolver
-	resolved                       bool
-	lock                           *sync.Mutex
+	definitions *itemHash
+	parser      *keyParser
+	providers   []Provider
+	resolvers   []Resolver
+	resolved    bool
+	lock        *sync.Mutex
 }
 
-//NewContainerBuilder returns a pointer to a new containerBuilder instance.
+// NewContainerBuilder returns a pointer to a new containerBuilder instance.
 func NewContainerBuilder() *containerBuilder {
 	return &containerBuilder{
-		parameters:  newItemHash(),
 		definitions: newItemHash(),
-		alias:       newItemHash(),
 		parser:      newKeyParser(),
 		providers:   make([]Provider, 0),
 		resolvers:   make([]Resolver, 0),
@@ -108,52 +87,72 @@ func NewContainerBuilder() *containerBuilder {
 	}
 }
 
-//SetParameter adds a new parameter value to the container on a given Key.
-func (c *containerBuilder) SetParameter(key string, value interface{}) {
-	c.panicIfResolved()
-
-	if _, err := json.Marshal(value); err != nil {
-		panic(fmt.Sprintf("invalid parameter param '%#v'", value))
-	}
-
-	k, _ := c.parser.parse(key)
-	c.parameters.set(k, value)
+// SetValue adds a new value or instance to the container on a given Key.
+func (c *containerBuilder) SetValue(key string, value interface{}) *definition {
+	return c.SetFactory(key, func(c Container) interface{} {
+		return value
+	})
 }
 
-//HasParameter returns true if parameter for the Key exists in the container.
-func (c *containerBuilder) HasParameter(key string) bool {
-	return c.parameters.Has(key)
-}
-
-//GetParameter retrieves a container parameter for the Key or panics if not found.
-func (c *containerBuilder) GetParameter(key string) interface{} {
-	return c.parameters.Get(key)
-}
-
-func (c *containerBuilder) SetMany(all ...Some) {
+// SetAll sets given bindings into the containerBuilder. Reserved tags: #value, #alias,
+// #inject and #factory; are used to set the correct service definition. If any of the
+// reserved tags is indicated, then #factory will be considered as default. Reserved
+// tags are all mutually exclusive and adding more than one at a time will panic.
+//
+//   b.SetAll([]Binding{
+//		{Key: "key1 #factory", Target: func(c Container) interface{} {
+//			return 1
+//		}},
+//		{Key: "key2 #value", Target: 2},
+//		{Key: "key3 #alias", Target: "key2"},
+//		{Key: "key4 #inject", Target: struct{}{}},
+//		{Key: "key5", Target: func(c Container) interface{} {  	// <- defaults to #factory
+//			return 5
+//		}},
+//		{Key: "key4 #value #alias", Target: "key2}, 			// <- will panic
+//	}...)
+func (c *containerBuilder) SetAll(all ...Binding) {
 	for _, i := range all {
-		switch i.Val.(type) {
-		case string:
-			c.SetAlias(i.Key, i.Val.(string))
-		case func(c Container) interface{}:
-			c.SetDefinition(i.Key, i.Val.(func(c Container) interface{}))
+		_, tags := c.parser.parse(i.Key)
+		switch {
+		case tags.Has(tagAlias):
+			c.SetAlias(i.Key, i.Target.(string))
+		case tags.Has(tagValue):
+			c.SetValue(i.Key, i.Target)
+		case tags.Has(tagInject):
+			c.SetInjectable(i.Key, i.Target)
+		case tags.Has(tagFactory):
+			fallthrough
 		default:
-			_, tags := c.parser.parse(i.Key)
-			if tags.Has(tagInject) {
-				c.SetInjectable(i.Key, i.Val)
-				continue
-			}
-			c.SetParameter(i.Key, i.Val)
+			c.SetFactory(i.Key, i.Target)
 		}
 	}
 }
 
-func (c *containerBuilder) SetInjectable(key string, i interface{}) {
+// SetInjectable adds a new definition for a given struct to the container referenced
+// by a given Key. Given struct must contain at least one public member labeled with
+// the "inject" label:
+//	 type SomeType struct {
+//	 	 field string `inject:"service.to.inject.key"`
+//	 }
+//
+// Keys can contain tags in the form of "#tag[=value]" where the value
+// part can be omitted.
+//
+// Reserved tags "#shared" and "#private" can be used to make a
+// definition shared (factory will return a singleton) and private (service will
+// be available to be injected as dependency but not available to be retrieved
+// from current container).
+func (c *containerBuilder) SetInjectable(key string, i interface{}) *definition {
 	t := reflect.TypeOf(i)
 	isPtr := false
 	if t.Kind() == reflect.Ptr {
 		isPtr = true
 		t = t.Elem()
+	}
+
+	if t.Kind() != reflect.Struct {
+		panic(fmt.Sprintf("invalid injectable for key %s, only structs can be injectables", key))
 	}
 
 	fields := make(map[int]string)
@@ -175,119 +174,85 @@ func (c *containerBuilder) SetInjectable(key string, i interface{}) {
 		fields[j] = k
 	}
 
-	c.SetDefinition(key, func(c Container) interface{} {
+	d := c.SetFactory(key, func(c Container) interface{} {
 		t := reflect.New(t)
 		e := t.Elem()
 		for i, k := range fields {
-			var p interface{}
-			if strings.HasPrefix(k, paramPrefix) {
-				p = c.GetParameter(strings.TrimLeft(k, paramPrefix))
-			} else {
-				p = c.Get(k)
-			}
-
+			p := c.Get(k)
 			v := reflect.ValueOf(p)
 			e.Field(i).Set(v)
 		}
 
 		if isPtr {
 			return t.Interface()
-
 		}
 
 		return e.Interface()
 	})
 
+	return d
+
 }
 
-//SetDefinition adds a new definition to the container referenced by a given
-//Key. Keys can contain tags in the form of "#tag[=value]" where the value part
-//can be omitted. Reserved tags "#shared" and "#private" can be used to make a
-//definition shared (factory will return a singleton) and private (service will
-//be available to be injected as dependency but not available to be retrieved
-//from current container).
-func (c *containerBuilder) SetDefinition(key string, factory func(c Container) interface{}) {
+// SetFactory adds a new definition to the container referenced by a given
+// Key. Keys can contain tags in the form of "#tag[=value]" where the value part
+// can be omitted.
+//
+// Reserved tags "#shared" and "#private" can be used to make a definition shared
+// (factory will return a singleton) and private (service will be available to be
+// injected as dependency but not available to be retrieved from current container).
+func (c *containerBuilder) SetFactory(key string, factory interface{}) *definition {
 	c.panicIfResolved()
+
+	f, ok := factory.(func(c Container) interface{})
+	if !ok {
+		panic(fmt.Sprintf("type '%T' for key '%s' is not a valid factory", factory, key))
+	}
 
 	k, tags := c.parser.parse(key)
 
-	c.alias.del(k)
-
-	priority := int16(priorityDefault)
-	if tags.Has(tagPriority) {
-		prioValue := tags.Get(tagPriority).(string)
-		parsed, err := strconv.ParseInt(prioValue, 10, 16)
-		if err != nil {
-			panic(fmt.Sprintf("priority value %s is not a valid number", prioValue))
-		}
-		priority = int16(parsed)
+	d, err := newDefinition(f, tags)
+	if err != nil {
+		panic(fmt.Sprintf("%s for key '%s'", err, key))
 	}
+	c.definitions.set(k, d)
 
-	c.definitions.set(k, &definition{
-		Factory:  factory,
-		Tags:     tags,
-		Shared:   tags.Has(tagShared),
-		Private:  tags.Has(tagPrivate),
-		Priority: priority,
-	})
+	return d
 }
 
-//HasDefinition returns true if definition for the Key exists in the container.
+// HasDefinition returns true if definition for the Key exists in the container.
 func (c *containerBuilder) HasDefinition(key string) bool {
-	if c.alias.Has(key) {
-		key = c.alias.Get(key).(*alias).Key
-	}
-
 	return c.definitions.Has(key)
 }
 
-//GetDefinition retrieves a container definition for the Key or panics if not found.
+// GetDefinition retrieves a container definition for the Key or panics if not found.
 func (c *containerBuilder) GetDefinition(key string) *definition {
-	if !c.alias.Has(key) {
-		return c.definitions.Get(key).(*definition)
-	}
-	a := c.alias.Get(key).(*alias)
-	d := c.definitions.Get(a.Key).(*definition)
-
-	if d.Private == a.Private {
-		return d
-	}
-
-	return &definition{
-		Factory: d.Factory,
-		Tags:    d.Tags,
-		Private: a.Private,
-	}
+	return c.definitions.Get(key).(*definition)
 }
 
-//SetAlias sets an alias for an existing definition.
-func (c *containerBuilder) SetAlias(key, def string) {
-	c.panicIfResolved()
-
-	k, tags := c.parser.parse(key)
+// SetAlias sets an alias for an existing definition. Aliases inherit the aliased service
+// factory but the can have thei own set of tags. As an example, a service might be "private"
+// and the corresponding alias can be public or even a singleton.
+func (c *containerBuilder) SetAlias(key, def string) *definition {
+	k, _ := c.parser.parse(key)
 
 	if !c.definitions.Has(def) {
 		panic(fmt.Sprintf("definition with id '%s' does not exist and alias cannot be set", def))
 	}
 
-	if c.definitions.Has(k) {
+	if c.definitions.Has(k) && c.definitions.Get(k).(*definition).AliasOf == nil {
 		panic(fmt.Sprintf("definition with id '%s' already exists and alias cannot be set", key))
 	}
 
-	c.alias.set(k, &alias{def, tags.Has(tagPrivate)})
+	aliased := c.definitions.Get(def).(*definition)
+
+	d := c.SetFactory(key, aliased.Factory)
+	d.AliasOf = aliased
+
+	return d
 }
 
-//HasAlias returns true if given alias Has been set into the container.
-func (c *containerBuilder) HasAlias(key string) bool {
-	return c.alias.Has(key)
-}
-
-//GetAlias returns the service Key related to given alias Key.
-func (c *containerBuilder) GetAlias(key string) *alias {
-	return c.alias.Get(key).(*alias)
-}
-
-//AddProvider adds a new service provider.
+// AddProvider adds a new service provider.
 func (c *containerBuilder) AddProvider(ps []Provider) {
 	if len(ps) > 0 {
 		c.panicIfResolved()
@@ -295,7 +260,7 @@ func (c *containerBuilder) AddProvider(ps []Provider) {
 	}
 }
 
-//AddResolver adds a new service resolver.
+// AddResolver adds a new service resolver.
 func (c *containerBuilder) AddResolver(rs []Resolver) {
 	if len(rs) > 0 {
 		c.panicIfResolved()
@@ -303,7 +268,7 @@ func (c *containerBuilder) AddResolver(rs []Resolver) {
 	}
 }
 
-//GetContainer resolves and returns the corresponding container.
+// GetContainer resolves and returns the corresponding container.
 func (c *containerBuilder) GetContainer() *container {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -331,31 +296,31 @@ func (c *containerBuilder) GetContainer() *container {
 //GetTaggedKeys returns All keys related to a given tag. If values provided, then
 //only the keys which match with tag and value will be returned.
 func (c *containerBuilder) GetTaggedKeys(tag string, values []string) []string {
-	tagged := make([]Some, 0)
+	tagged := make([]Binding, 0)
 	for key, def := range c.definitions.All() {
 		d := def.(*definition)
 		if !d.Tags.Has(tag) {
 			continue
 		}
 		if len(values) == 0 {
-			tagged = append(tagged, Some{key, d})
+			tagged = append(tagged, Binding{key, d})
 			continue
 		}
 		tagVal := d.Tags.Get(tag).(string)
 		for _, v := range values {
 			if v == tagVal {
-				tagged = append(tagged, Some{key, d})
+				tagged = append(tagged, Binding{key, d})
 				break
 			}
 		}
 	}
 
 	sort.SliceStable(tagged, func(i, j int) bool {
-		return tagged[i].Val.(*definition).Priority > tagged[j].Val.(*definition).Priority
+		return tagged[i].Target.(*definition).Priority > tagged[j].Target.(*definition).Priority
 	})
 
 	keys := make([]string, 0, len(tagged))
-	for _, i := range tagged{
+	for _, i := range tagged {
 		keys = append(keys, i.Key)
 	}
 	return keys
