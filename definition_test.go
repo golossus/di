@@ -9,11 +9,12 @@ import (
 	"testing"
 )
 
+func dummyFactory(c Container) interface{} {
+	return 1
+}
+
 func TestNewDefinition(t *testing.T) {
 	parser := newKeyParser()
-	dummyFactory := func(c Container) interface{} {
-		return 1
-	}
 
 	t.Run("shared", func(t *testing.T) {
 		sharedData := []struct {
@@ -33,7 +34,7 @@ func TestNewDefinition(t *testing.T) {
 		for _, data := range sharedData {
 			t.Run(data.name, func(t *testing.T) {
 				_, tags := parser.parse(data.key)
-				def := newDefinition(dummyFactory, tags)
+				def, _ := newDefinition(dummyFactory, tags)
 
 				assert.Equal(t, data.expected, def.Shared)
 			})
@@ -58,7 +59,7 @@ func TestNewDefinition(t *testing.T) {
 		for _, data := range sharedData {
 			t.Run(data.name, func(t *testing.T) {
 				_, tags := parser.parse(data.key)
-				def := newDefinition(dummyFactory, tags)
+				def, _ := newDefinition(dummyFactory, tags)
 
 				assert.Equal(t, data.expected, def.Private)
 			})
@@ -81,14 +82,37 @@ func TestNewDefinition(t *testing.T) {
 		for _, data := range sharedData {
 			t.Run(data.name, func(t *testing.T) {
 				_, tags := parser.parse(data.key)
-				def := newDefinition(dummyFactory, tags)
+				def, _ := newDefinition(dummyFactory, tags)
 
 				assert.Equal(t, data.expected, def.Priority)
 			})
 		}
 	})
 
-	t.Run("creation panics", func(t *testing.T) {
+	t.Run("kind", func(t *testing.T) {
+		sharedData := []struct {
+			name     string
+			key      string
+			expected string
+		}{
+			{"is factory by default", "", "factory"},
+			{"is factory", "#factory", "factory"},
+			{"is alias", "#alias", "alias"},
+			{"is value", "#value", "value"},
+			{"is injectable", "#inject", "inject"},
+		}
+
+		for _, data := range sharedData {
+			t.Run(data.name, func(t *testing.T) {
+				_, tags := parser.parse(data.key)
+				def, _ := newDefinition(dummyFactory, tags)
+
+				assert.Equal(t, data.expected, def.Kind)
+			})
+		}
+	})
+
+	t.Run("creation returns error", func(t *testing.T) {
 		sharedData := []struct {
 			name  string
 			key   string
@@ -97,15 +121,14 @@ func TestNewDefinition(t *testing.T) {
 			{"if invalid #priority=abc", "#priority=abc", "priority tag value 'abc' is not a valid number"},
 			{"if invalid #private=off", "#private=off", "private tag value 'off' is not a valid boolean"},
 			{"if invalid #shared=on", "#shared=on", "shared tag value 'on' is not a valid boolean"},
+			{"if overlapping kinds", "#factory #value", "tag 'value' can't be used simultaneously with [factory value alias inject]"},
 		}
 
 		for _, data := range sharedData {
 			t.Run(data.name, func(t *testing.T) {
 				_, tags := parser.parse(data.key)
-
-				assert.PanicsWithValue(t, data.error, func() {
-					newDefinition(dummyFactory, tags)
-				})
+				_, err := newDefinition(dummyFactory, tags)
+				assert.Equal(t, data.error, err.Error())
 			})
 		}
 	})

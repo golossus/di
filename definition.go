@@ -17,53 +17,97 @@ type definition struct {
 	Priority int16
 	Shared   bool
 	Private  bool
+	Kind     string
 }
 
 // newDefinition returns a new definition pointer
-func newDefinition(factory func(c Container) interface{}, tags *itemHash) *definition {
+func newDefinition(factory func(c Container) interface{}, tags *itemHash) (*definition, error) {
+	priorty, err := parseIntegerTag(tagPriority, tags)
+	if err != nil {
+		return nil, err
+	}
+
+	shared, err := parseBoolTag(tagShared, tags)
+	if err != nil {
+		return nil, err
+	}
+
+	private, err := parseBoolTag(tagPrivate, tags)
+	if err != nil {
+		return nil, err
+	}
+
+	kind, err := selectKindTag(tags)
+	if err != nil {
+		return nil, err
+	}
+
 	return &definition{
 		Factory:  factory,
 		Tags:     tags,
-		Priority: parseIntegerTag(tagPriority, tags),
-		Shared:   parseBoolTag(tagShared, tags),
-		Private:  parseBoolTag(tagPrivate, tags),
-	}
+		Priority: priorty,
+		Shared:   shared,
+		Private:  private,
+		Kind:     kind,
+	}, nil
 }
 
-// parseBoolTag looks for a given tag name in tags and returns the corresponding boolean value
-func parseBoolTag(tagName string, tags *itemHash) bool {
+// parseBoolTag looks for a given tag name in tags and returns the corresponding boolean value.
+// It returns an error if tag value can not be parsed.
+func parseBoolTag(tagName string, tags *itemHash) (bool, error) {
 	if !tags.Has(tagName) {
-		return false
+		return false, nil
 	}
 
 	raw := tags.Get(tagName).(string)
 	if "" == raw {
-		return true
+		return true, nil
 	}
 
 	parsed, err := strconv.ParseBool(raw)
 	if err != nil {
-		panic(fmt.Sprintf("%s tag value '%s' is not a valid boolean", tagName, raw))
+		return false, fmt.Errorf("%s tag value '%s' is not a valid boolean", tagName, raw)
 	}
-	return parsed
+	return parsed, nil
 }
 
-// parseIntegerTag looks for a given tag name in tags and returns the corresponding int16 value
-func parseIntegerTag(tagName string, tags *itemHash) int16 {
+// parseIntegerTag looks for a given tag name in tags and returns the corresponding int16 value.
+// It returns an error if tag value can not be parsed.
+func parseIntegerTag(tagName string, tags *itemHash) (int16, error) {
 	var i int16 = 0
 	if !tags.Has(tagName) {
-		return i
+		return i, nil
 	}
 
 	raw := tags.Get(tagName).(string)
 	if "" == raw {
-		return i
+		return i, nil
 	}
 
 	parsed, err := strconv.ParseInt(raw, 10, 16)
 	if err != nil {
-		panic(fmt.Sprintf("%s tag value '%s' is not a valid number", tagName, raw))
+		return 0, fmt.Errorf("%s tag value '%s' is not a valid number", tagName, raw)
 	}
 
-	return int16(parsed)
+	return int16(parsed), nil
+}
+
+// selectKindTag looks for one of the tags representing its kind and returns it. If any of the
+// the reserved kind tags is found it returns "factory" as the default value. It returns error
+// if more than one reserved kind tag is found.
+func selectKindTag(tags *itemHash) (string, error) {
+	kindTags := []string{tagFactory, tagValue, tagAlias, tagInject}
+	found := 0
+	kind := tagFactory
+	for _, t := range kindTags {
+		if tags.Has(t) {
+			kind = t
+			found++
+		}
+	}
+	if found > 1 {
+		return kind, fmt.Errorf("tag '%s' can't be used simultaneously with %v", kind, kindTags)
+	}
+
+	return kind, nil
 }

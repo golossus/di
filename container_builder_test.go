@@ -71,7 +71,7 @@ func TestContainerBuilder_SetParameter_PanicsIfResolved(t *testing.T) {
 	})
 }
 
-func TestContainerBuilder_SetDefinition_PanicsIfResolved(t *testing.T) {
+func TestContainerBuilder_SetFactory_PanicsIfResolved(t *testing.T) {
 	b := NewContainerBuilder()
 	b.resolved = true
 
@@ -85,7 +85,7 @@ func TestContainerBuilder_SetDefinition_PanicsIfResolved(t *testing.T) {
 	})
 }
 
-func TestContainerBuilder_SetDefinition_Success(t *testing.T) {
+func TestContainerBuilder_SetFactory_Success(t *testing.T) {
 	b := NewContainerBuilder()
 	key := "key1"
 	val := func(c Container) interface{} {
@@ -99,7 +99,7 @@ func TestContainerBuilder_SetDefinition_Success(t *testing.T) {
 	assert.Equal(t, val(&container{}), f(&container{}))
 }
 
-func TestContainerBuilder_SetDefinition_SuccessIfConstructorHasNoArgument(t *testing.T) {
+func TestContainerBuilder_SetFactory_SuccessIfConstructorHasNoArgument(t *testing.T) {
 	b := NewContainerBuilder()
 	key := "key1"
 	val := func(_ Container) interface{} {
@@ -113,7 +113,7 @@ func TestContainerBuilder_SetDefinition_SuccessIfConstructorHasNoArgument(t *tes
 	assert.Equal(t, val(&container{}), f(&container{}))
 }
 
-func TestContainerBuilder_SetDefinition_RemovesAlias(t *testing.T) {
+func TestContainerBuilder_SetFactory_RemovesAlias(t *testing.T) {
 	b := NewContainerBuilder()
 	alias := "alias"
 	key := "Key"
@@ -138,7 +138,7 @@ func TestContainerBuilder_SetDefinition_RemovesAlias(t *testing.T) {
 	assert.Nil(t, a.AliasOf)
 }
 
-func TestContainerBuilder_SetDefinition_SuccessWithTags(t *testing.T) {
+func TestContainerBuilder_SetFactory_SuccessWithTags(t *testing.T) {
 	b := NewContainerBuilder()
 	key := "key1 #private #shared #other"
 	val := func(c Container) interface{} {
@@ -160,6 +160,7 @@ func TestContainerBuilder_SetDefinition_SuccessWithTags(t *testing.T) {
 
 func TestContainerBuilder_SetAlias_PanicsIfResolved(t *testing.T) {
 	b := NewContainerBuilder()
+	b.SetFactory("key2", dummyFactory)
 	b.resolved = true
 
 	key := "key1"
@@ -377,20 +378,57 @@ func TestContainerBuilder_GetContainer_IfConcurrent(t *testing.T) {
 }
 
 func TestContainerBuilder_SetAll(t *testing.T) {
-	b := NewContainerBuilder()
-	b.SetAll([]Binding{
-		{Key: "service #private", Target: func(c Container) interface{} {
-			return c.Get("param").(int)
-		}},
-		{Key: "param #value", Target: 1},
-		{Key: "alias #alias", Target: "service"},
-		{Key: "injectable #inject", Target: struct{}{}},
-	}...)
+	t.Run("binds all kinds of definitions", func(t *testing.T) {
+		b := NewContainerBuilder()
+		b.SetAll([]Binding{
+			{Key: "service #factory", Target: func(c Container) interface{} {
+				return c.Get("param").(int)
+			}},
+			{Key: "param #value", Target: 1},
+			{Key: "alias #alias", Target: "service"},
+			{Key: "injectable #inject", Target: struct{}{}},
+			{Key: "service2", Target: func(c Container) interface{} {
+				return c.Get("param").(int)
+			}},
+		}...)
 
-	assert.True(t, b.HasDefinition("service"))
-	assert.True(t, b.HasDefinition("injectable"))
-	assert.True(t, b.HasDefinition("param"))
-	assert.True(t, b.HasDefinition("alias"))
+		assert.True(t, b.HasDefinition("service"))
+		assert.True(t, b.HasDefinition("injectable"))
+		assert.True(t, b.HasDefinition("param"))
+		assert.True(t, b.HasDefinition("alias"))
+		assert.True(t, b.HasDefinition("service2"))
+		assert.Equal(t, "factory", b.GetDefinition("service").Kind)
+		assert.Equal(t, "inject", b.GetDefinition("injectable").Kind)
+		assert.Equal(t, "value", b.GetDefinition("param").Kind)
+		assert.Equal(t, "alias", b.GetDefinition("alias").Kind)
+		assert.Equal(t, "factory", b.GetDefinition("service2").Kind)
+	})
+
+	t.Run("panics", func(t *testing.T) {
+		sharedData := []struct {
+			name   string
+			key    string
+			target interface{}
+			error  string
+		}{
+			{"if invalid #priority=abc", "#priority=abc", dummyFactory, "priority tag value 'abc' is not a valid number for key '#priority=abc'"},
+			{"if invalid #private=off", "#private=off", dummyFactory, "private tag value 'off' is not a valid boolean for key '#private=off'"},
+			{"if invalid #shared=on", "#shared=on", dummyFactory, "shared tag value 'on' is not a valid boolean for key '#shared=on'"},
+			{"if overlapping kinds", "#factory #value", dummyFactory, "tag 'value' can't be used simultaneously with [factory value alias inject] for key '#factory #value'"},
+			{"if invalid factory", "#factory", 1, "type 'int' for key '#factory' is not a valid factory"},
+		}
+
+		b := NewContainerBuilder()
+		for _, data := range sharedData {
+			t.Run(data.name, func(t *testing.T) {
+				assert.PanicsWithValue(t, data.error, func() {
+					b.SetAll([]Binding{
+						{Key: data.key, Target: data.target},
+					}...)
+				})
+			})
+		}
+	})
 }
 
 func TestContainerBuilder_SetInjectable(t *testing.T) {
@@ -444,7 +482,7 @@ func TestContainerBuilder_SetInjectable(t *testing.T) {
 	for _, data := range []struct {
 		name  string
 		value interface{}
-		error  string
+		error string
 	}{
 		{"panics if not a struct", "dummy", "invalid injectable for key i1, only structs can be injectables"},
 		{"panics if unexported field to inject", UnexportedField{f1: ""}, "unexported field github.com/golossus/di/f1 can not be injected"},
