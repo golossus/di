@@ -12,13 +12,13 @@ import (
 )
 
 const (
-	tagShared   = "shared"
-	tagPrivate  = "private"
-	tagPriority = "priority"
-	tagInject   = "inject"
-	tagValue    = "value"
-	tagAlias    = "alias"
-	tagFactory  = "factory"
+	TagShared   = "shared"
+	TagPrivate  = "private"
+	TagPriority = "priority"
+	TagInject   = "inject"
+	TagValue    = "value"
+	TagAlias    = "alias"
+	TagFactory  = "factory"
 )
 
 type Binding struct {
@@ -89,7 +89,7 @@ func NewContainerBuilder() *containerBuilder {
 
 // SetValue adds a new value or instance to the container on a given Key.
 func (c *containerBuilder) SetValue(key string, value interface{}) *definition {
-	return c.setDefinition(fmt.Sprintf("%s #%s", key, tagValue), func(c Container) interface{} {
+	return c.setDefinition(fmt.Sprintf("%s #%s", key, TagValue), func(c Container) interface{} {
 		return value
 	})
 }
@@ -115,13 +115,13 @@ func (c *containerBuilder) SetAll(all ...Binding) {
 	for _, i := range all {
 		_, tags := c.parser.parse(i.Key)
 		switch {
-		case tags.Has(tagAlias):
+		case tags.Has(TagAlias):
 			c.SetAlias(i.Key, i.Target.(string))
-		case tags.Has(tagValue):
+		case tags.Has(TagValue):
 			c.SetValue(i.Key, i.Target)
-		case tags.Has(tagInject):
+		case tags.Has(TagInject):
 			c.SetInjectable(i.Key, i.Target)
-		case tags.Has(tagFactory):
+		case tags.Has(TagFactory):
 			fallthrough
 		default:
 			c.SetFactory(i.Key, i.Target)
@@ -174,7 +174,7 @@ func (c *containerBuilder) SetInjectable(key string, i interface{}) *definition 
 		fields[j] = k
 	}
 
-	d := c.setDefinition(fmt.Sprintf("%s #%s", key, tagInject), func(c Container) interface{} {
+	d := c.setDefinition(fmt.Sprintf("%s #%s", key, TagInject), func(c Container) interface{} {
 		t := reflect.New(t)
 		e := t.Elem()
 		for i, k := range fields {
@@ -207,7 +207,7 @@ func (c *containerBuilder) SetFactory(key string, factory interface{}) *definiti
 		panic(fmt.Sprintf("type '%T' for key '%s' is not a valid factory", factory, key))
 	}
 
-	return c.setDefinition(fmt.Sprintf("%s #%s", key, tagFactory), f)
+	return c.setDefinition(fmt.Sprintf("%s #%s", key, TagFactory), f)
 }
 
 // HasDefinition returns true if definition for the Key exists in the container.
@@ -236,7 +236,7 @@ func (c *containerBuilder) SetAlias(key, def string) *definition {
 
 	aliased := c.definitions.Get(def).(*definition)
 
-	d := c.setDefinition(fmt.Sprintf("%s #%s", key, tagAlias), aliased.Factory)
+	d := c.setDefinition(fmt.Sprintf("%s #%s", key, TagAlias), aliased.Factory)
 	d.AliasOf = aliased
 
 	return d

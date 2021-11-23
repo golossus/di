@@ -22,17 +22,17 @@ type definition struct {
 
 // newDefinition returns a new definition pointer
 func newDefinition(factory func(c Container) interface{}, tags *itemHash) (*definition, error) {
-	priorty, err := parseIntegerTag(tagPriority, tags)
+	priorty, err := parseIntegerTag(TagPriority, tags)
 	if err != nil {
 		return nil, err
 	}
 
-	shared, err := parseBoolTag(tagShared, tags)
+	shared, err := parseBoolTag(TagShared, tags)
 	if err != nil {
 		return nil, err
 	}
 
-	private, err := parseBoolTag(tagPrivate, tags)
+	private, err := parseBoolTag(TagPrivate, tags)
 	if err != nil {
 		return nil, err
 	}
@@ -96,9 +96,9 @@ func parseIntegerTag(tagName string, tags *itemHash) (int16, error) {
 // the reserved kind tags is found it returns "factory" as the default value. It returns error
 // if more than one reserved kind tag is found.
 func selectKindTag(tags *itemHash) (string, error) {
-	kindTags := []string{tagFactory, tagValue, tagAlias, tagInject}
+	kindTags := []string{TagFactory, TagValue, TagAlias, TagInject}
 	found := 0
-	kind := tagFactory
+	kind := TagFactory
 	for _, t := range kindTags {
 		if tags.Has(t) {
 			kind = t
