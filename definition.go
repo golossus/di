@@ -92,7 +92,7 @@ func parseIntegerTag(tagName string, tags *itemHash) (int16, error) {
 	return int16(parsed), nil
 }
 
-// selectKindTag looks for one of the tags representing its kind and returns it. If any of the
+// selectKindTag looks for one of the tags representing its kind and returns it. If none of
 // the reserved kind tags is found it returns "factory" as the default value. It returns error
 // if more than one reserved kind tag is found.
 func selectKindTag(tags *itemHash) (string, error) {

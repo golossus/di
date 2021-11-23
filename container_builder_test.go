@@ -411,10 +411,10 @@ func TestContainerBuilder_SetAll(t *testing.T) {
 			target interface{}
 			error  string
 		}{
-			{"if invalid #priority=abc", "#priority=abc", dummyFactory, "priority tag value 'abc' is not a valid number for key '#priority=abc'"},
-			{"if invalid #private=off", "#private=off", dummyFactory, "private tag value 'off' is not a valid boolean for key '#private=off'"},
-			{"if invalid #shared=on", "#shared=on", dummyFactory, "shared tag value 'on' is not a valid boolean for key '#shared=on'"},
-			{"if overlapping kinds", "#factory #value", dummyFactory, "tag 'value' can't be used simultaneously with [factory value alias inject] for key '#factory #value'"},
+			{"if invalid #priority=abc", "dummy #priority=abc", dummyFactory, "priority tag value 'abc' is not a valid number for key 'dummy'"},
+			{"if invalid #private=off", "dummy #private=off", dummyFactory, "private tag value 'off' is not a valid boolean for key 'dummy'"},
+			{"if invalid #shared=on", "dummy #shared=on", dummyFactory, "shared tag value 'on' is not a valid boolean for key 'dummy'"},
+			{"if overlapping kinds", "dummy #factory #value", dummyFactory, "tag 'value' can't be used simultaneously with [factory value alias inject] for key 'dummy'"},
 			{"if invalid factory", "#factory", 1, "type 'int' for key '#factory' is not a valid factory"},
 		}
 

@@ -89,7 +89,7 @@ func NewContainerBuilder() *containerBuilder {
 
 // SetValue adds a new value or instance to the container on a given Key.
 func (c *containerBuilder) SetValue(key string, value interface{}) *definition {
-	return c.SetFactory(key, func(c Container) interface{} {
+	return c.setDefinition(fmt.Sprintf("%s #%s", key, tagValue), func(c Container) interface{} {
 		return value
 	})
 }
@@ -174,7 +174,7 @@ func (c *containerBuilder) SetInjectable(key string, i interface{}) *definition 
 		fields[j] = k
 	}
 
-	d := c.SetFactory(key, func(c Container) interface{} {
+	d := c.setDefinition(fmt.Sprintf("%s #%s", key, tagInject), func(c Container) interface{} {
 		t := reflect.New(t)
 		e := t.Elem()
 		for i, k := range fields {
@@ -202,22 +202,12 @@ func (c *containerBuilder) SetInjectable(key string, i interface{}) *definition 
 // (factory will return a singleton) and private (service will be available to be
 // injected as dependency but not available to be retrieved from current container).
 func (c *containerBuilder) SetFactory(key string, factory interface{}) *definition {
-	c.panicIfResolved()
-
 	f, ok := factory.(func(c Container) interface{})
 	if !ok {
 		panic(fmt.Sprintf("type '%T' for key '%s' is not a valid factory", factory, key))
 	}
 
-	k, tags := c.parser.parse(key)
-
-	d, err := newDefinition(f, tags)
-	if err != nil {
-		panic(fmt.Sprintf("%s for key '%s'", err, key))
-	}
-	c.definitions.set(k, d)
-
-	return d
+	return c.setDefinition(fmt.Sprintf("%s #%s", key, tagFactory), f)
 }
 
 // HasDefinition returns true if definition for the Key exists in the container.
@@ -246,8 +236,22 @@ func (c *containerBuilder) SetAlias(key, def string) *definition {
 
 	aliased := c.definitions.Get(def).(*definition)
 
-	d := c.SetFactory(key, aliased.Factory)
+	d := c.setDefinition(fmt.Sprintf("%s #%s", key, tagAlias), aliased.Factory)
 	d.AliasOf = aliased
+
+	return d
+}
+
+func (c *containerBuilder) setDefinition(key string, factory func(c Container) interface{}) *definition {
+	c.panicIfResolved()
+
+	k, tags := c.parser.parse(key)
+
+	d, err := newDefinition(factory, tags)
+	if err != nil {
+		panic(fmt.Sprintf("%s for key '%s'", err, k))
+	}
+	c.definitions.set(k, d)
 
 	return d
 }
