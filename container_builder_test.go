@@ -13,7 +13,6 @@ func TestNewContainerBuilder_ReturnsInitialised(t *testing.T) {
 	b := NewContainerBuilder()
 	assert.NotNil(t, b.definitions)
 	assert.NotNil(t, b.providers)
-	assert.NotNil(t, b.parser)
 	assert.Len(t, b.definitions.All(), 0)
 	assert.Len(t, b.providers, 0)
 	assert.False(t, b.resolved)
@@ -152,7 +151,7 @@ func TestContainerBuilder_SetFactory_SuccessWithTags(t *testing.T) {
 	d := b.GetDefinition("key1")
 	assert.True(t, d.Private)
 	assert.True(t, d.Shared)
-	assert.True(t, d.Tags.Has("other"))
+	assert.Equal(t, "", d.Tags["other"])
 
 	f := d.Factory
 	assert.Equal(t, val(&container{}), f(&container{}))
@@ -215,7 +214,7 @@ func TestContainerBuilder_SetAlias_Success(t *testing.T) {
 	a := b.GetDefinition(finalAlias)
 	assert.Equal(t, d.Factory(&container{}), a.Factory(&container{}))
 	assert.Equal(t, d, a.AliasOf)
-	assert.NotEqual(t, d.Tags.All(), a.Tags.All())
+	assert.NotEqual(t, d.Tags, a.Tags)
 }
 
 func TestContainerBuilder_SetAlias_HasOwnTags(t *testing.T) {
@@ -237,8 +236,8 @@ func TestContainerBuilder_SetAlias_HasOwnTags(t *testing.T) {
 
 	assert.Equal(t, d.Factory(&container{}), a.Factory(&container{}))
 	assert.Equal(t, d, a.AliasOf)
-	assert.True(t, a.Tags.Has("tag1"))
-	assert.True(t, a.Tags.Has("private"))
+	assert.True(t, a.HasTag("tag1"))
+	assert.True(t, a.HasTag("private"))
 
 }
 
@@ -415,7 +414,6 @@ func TestContainerBuilder_SetAll(t *testing.T) {
 			{"if invalid #private=off", "dummy #private=off", dummyFactory, "private tag value 'off' is not a valid boolean for key 'dummy'"},
 			{"if invalid #shared=on", "dummy #shared=on", dummyFactory, "shared tag value 'on' is not a valid boolean for key 'dummy'"},
 			{"if overlapping kinds", "dummy #factory #value", dummyFactory, "tag 'value' can't be used simultaneously with [factory value alias inject] for key 'dummy'"},
-			{"if invalid factory", "#factory", 1, "type 'int' for key '#factory' is not a valid factory"},
 		}
 
 		b := NewContainerBuilder()
@@ -428,6 +426,15 @@ func TestContainerBuilder_SetAll(t *testing.T) {
 				})
 			})
 		}
+	})
+
+	t.Run("panics if invalid factory", func(t *testing.T) {
+		b := NewContainerBuilder()
+		assert.Panics(t, func() {
+			b.SetAll([]Binding{
+				{Key: "#factory", Target: 1},
+			})
+		})
 	})
 }
 
