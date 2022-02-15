@@ -26,7 +26,7 @@ type Binding struct {
 	Target interface{}
 }
 
-// Provider allows to provide definitions into containerBuilder. Binding dependencies
+// Provider allows providing definitions into containerBuilder. Binding dependencies
 // might not be available yet during the call to this method.
 type Provider interface {
 	Provide(builder ContainerBuilder)
@@ -54,7 +54,7 @@ func (f ResolverFunc) Resolve(b ContainerBuilder) {
 
 // ContainerBuilder interface declares the public api for containerBuilder type.
 type ContainerBuilder interface {
-	SetAll(all ...Binding)
+	SetAll(all []Binding)
 	SetValue(key string, value interface{}) *definition
 	SetFactory(key string, factory interface{}) *definition
 	SetInjectable(key string, value interface{}) *definition
@@ -99,7 +99,7 @@ func (c *containerBuilder) SetValue(key string, value interface{}) *definition {
 // reserved tags is indicated, then #factory will be considered as default. Reserved
 // tags are all mutually exclusive and adding more than one at a time will panic.
 //
-//   b.SetAll([]Binding{
+//	b.SetAll([]Binding{
 //		{Key: "key1 #factory", Target: func(c Container) interface{} {
 //			return 1
 //		}},
@@ -110,8 +110,8 @@ func (c *containerBuilder) SetValue(key string, value interface{}) *definition {
 //			return 5
 //		}},
 //		{Key: "key4 #value #alias", Target: "key2}, 			// <- will panic
-//	}...)
-func (c *containerBuilder) SetAll(all ...Binding) {
+//	})
+func (c *containerBuilder) SetAll(all []Binding) {
 	for _, i := range all {
 		_, tags := c.parser.parse(i.Key)
 		switch {
