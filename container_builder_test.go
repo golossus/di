@@ -390,7 +390,7 @@ func TestContainerBuilder_SetAll(t *testing.T) {
 			{Key: "service2", Target: func(c Container) interface{} {
 				return c.Get("param").(int)
 			}},
-		}...)
+		})
 
 		assert.True(t, b.HasDefinition("service"))
 		assert.True(t, b.HasDefinition("injectable"))
@@ -424,7 +424,7 @@ func TestContainerBuilder_SetAll(t *testing.T) {
 				assert.PanicsWithValue(t, data.error, func() {
 					b.SetAll([]Binding{
 						{Key: data.key, Target: data.target},
-					}...)
+					})
 				})
 			})
 		}
