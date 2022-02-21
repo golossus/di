@@ -11,6 +11,7 @@ import (
 	"sync"
 )
 
+// This is the list of reserved tags with relevant meaning for the container.
 const (
 	TagShared   = "shared"
 	TagPrivate  = "private"
@@ -21,36 +22,11 @@ const (
 	TagFactory  = "factory"
 )
 
+// Binding represents the information required to declare or bind a service definition into the container.
 type Binding struct {
 	Key    string
 	Target interface{}
 	Tags   map[string]string
-}
-
-// Provider allows providing definitions into containerBuilder. Binding dependencies
-// might not be available yet during the call to this method.
-type Provider interface {
-	Provide(builder ContainerBuilder)
-}
-
-// ProviderFunc adapts a normal func into a Provider.
-type ProviderFunc func(ContainerBuilder)
-
-func (f ProviderFunc) Provide(b ContainerBuilder) {
-	f(b)
-}
-
-// Resolver allows to resolve definitions into containerBuilder once All services
-// definitions are available.
-type Resolver interface {
-	Resolve(builder ContainerBuilder)
-}
-
-// ResolverFunc adapts a normal func into a Resolver.
-type ResolverFunc func(ContainerBuilder)
-
-func (f ResolverFunc) Resolve(b ContainerBuilder) {
-	f(b)
 }
 
 // ContainerBuilder interface declares the public API for containerBuilder type. ContainerBuilder is used
@@ -60,15 +36,22 @@ func (f ResolverFunc) Resolve(b ContainerBuilder) {
 // The setter methods allow providing extra tags to add metadata to service definitions. There are some reserved
 // tags which are useful to indicate the container how to build a specific service:
 //
-//	- TagShared: default "true", declares a service as "shared" and the container will return a singleton. It is
-//	  required to use pointers for returned services to work as real singleton.
-// 	- TagPrivate: default "true", declares a service as "private" and it will be available to be injected as dependency
-//	  of another service but not available to be retrieved from current container.
-//	- TagValue, TagFactory, TagInject and TagAlias: default "", these tags are mainly used with bindings and SetAll
+//	- TagShared: default tag value "true", declares a service as "shared" and the container will return a singleton. It
+//	  is required to use pointers for returned services to work as real singletons.
+// 	- TagPrivate: default tag value "true", declares a service as "private" and it will be available to be injected as
+//	  dependency of another service but not available to be retrieved from current container.
+//	- TagValue, TagFactory, TagInject and TagAlias: default tag value "", these tags are used with bindings and SetAll
 //	  method to indicate the container which kind of service to use (a value, a factory, an injectable struct or an alias).
-//	- TagPriority: default "0", can be used to sort the services by priority when retrieving services by tag. The higher
-//	  the value, the higher the priority. Services will be sorted and the ones with higher priority will be returned
-//	  on the lowest indexes of the result slice.
+//	- TagPriority: default tag value "0", can be used to sort the services by priority when retrieving services by tag.
+//    The higher the value, the higher the priority. Services will be sorted and the ones with higher priority will be
+//    returned on the lowest indexes of the result slice.
+//
+// Additionally, tags can also be indicated in the key of the service. Use the "#" char to indicate a tag. Tag values can
+// also be indicated by this method using the "=" followed by the value of the tag. Key portion, tags and values will be
+// trimmed to remove empty spaces at the start and end of them. Tags indicated as method argument will have precedence
+// over the ones indicated in the key.
+//
+// 	- Example: "my.key #private # custom = abc" -> { Key: "my.key", Tags: {"private": "", "custom": "abc" }
 //
 // By default, services can be overwritten by using the same key as an existing one. Aliases can also be overwritten but
 // trying to set an alias with a key used by a real service definition will fail.
@@ -87,7 +70,7 @@ type ContainerBuilder interface {
 // containerBuilder implements ContainerBuilder interface to bind service definitions
 // and resolve the final service container.
 type containerBuilder struct {
-	definitions *itemHash
+	definitions map[string]*definition
 	providers   []Provider
 	resolvers   []Resolver
 	resolved    bool
@@ -97,7 +80,7 @@ type containerBuilder struct {
 // NewContainerBuilder returns a pointer to a new containerBuilder instance.
 func NewContainerBuilder() *containerBuilder {
 	return &containerBuilder{
-		definitions: newItemHash(),
+		definitions: make(map[string]*definition),
 		providers:   make([]Provider, 0),
 		resolvers:   make([]Resolver, 0),
 		resolved:    false,
@@ -105,6 +88,8 @@ func NewContainerBuilder() *containerBuilder {
 	}
 }
 
+// panicIfResolved panics the execution if containerBuilder is already resolved. This guard is internally used on services
+// declaration methods to ensure a containerBuilder is not altered after it has already resolved the service container.
 func (c *containerBuilder) panicIfResolved() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -114,6 +99,8 @@ func (c *containerBuilder) panicIfResolved() {
 	}
 }
 
+// setDefinition binds a service factory into the containerBuilder on a specific key and an optional list of tags. Tags
+// can also be indicated in the key.
 func (c *containerBuilder) setDefinition(key string, factory func(c Container) interface{}, tags ...map[string]string) *definition {
 	c.panicIfResolved()
 
@@ -124,7 +111,7 @@ func (c *containerBuilder) setDefinition(key string, factory func(c Container) i
 	if err != nil {
 		panic(fmt.Sprintf("%s for key '%s'", err, k))
 	}
-	c.definitions.set(k, def)
+	c.definitions[k] = def
 
 	return def
 }
@@ -212,15 +199,14 @@ func (c *containerBuilder) SetInjectable(key string, i interface{}, tags ...map[
 // public or even a singleton. Aliases can be replaced by real services definitions, the contrary will fail.
 func (c *containerBuilder) SetAlias(key, def string, tags ...map[string]string) *definition {
 
-	if !c.definitions.Has(def) {
-		panic(fmt.Sprintf("definition with id '%s' does not exist and alias cannot be set", def))
-	}
-
-	if c.definitions.Has(key) && c.definitions.Get(key).(*definition).AliasOf == nil {
+	if d, ok := c.definitions[key]; ok && d.AliasOf == nil {
 		panic(fmt.Sprintf("definition with id '%s' already exists and alias cannot be set", key))
 	}
 
-	aliased := c.definitions.Get(def).(*definition)
+	aliased, ok := c.definitions[def]
+	if !ok {
+		panic(fmt.Sprintf("definition with id '%s' does not exist and alias cannot be set", def))
+	}
 
 	tags = append(tags, map[string]string{TagAlias: ""})
 	d := c.setDefinition(key, aliased.Factory, tags...)
@@ -256,7 +242,7 @@ func (c *containerBuilder) SetAll(all []Binding) {
 			panic(fmt.Sprintf("%s for key '%s'", err, k))
 		}
 
-		switch kind{
+		switch kind {
 		case TagAlias:
 			c.SetAlias(k, b.Target.(string), mergedTags)
 		case TagValue:
@@ -271,33 +257,19 @@ func (c *containerBuilder) SetAll(all []Binding) {
 	}
 }
 
-// HasDefinition returns true if definition for the Key exists in the container.
+// HasDefinition returns true if definition for the given key exists in the container.
 func (c *containerBuilder) HasDefinition(key string) bool {
-	return c.definitions.Has(key)
+	_, ok := c.definitions[key]
+	return ok
 }
 
-// GetDefinition retrieves a container definition for the Key or panics if not found.
+// GetDefinition retrieves a container definition for the given key or nil if not found.
 func (c *containerBuilder) GetDefinition(key string) *definition {
-	return c.definitions.Get(key).(*definition)
+	def, _ := c.definitions[key]
+	return def
 }
 
-// AddProvider adds a new service provider.
-func (c *containerBuilder) AddProvider(ps []Provider) {
-	if len(ps) > 0 {
-		c.panicIfResolved()
-		c.providers = append(c.providers, ps...)
-	}
-}
-
-// AddResolver adds a new service resolver.
-func (c *containerBuilder) AddResolver(rs []Resolver) {
-	if len(rs) > 0 {
-		c.panicIfResolved()
-		c.resolvers = append(c.resolvers, rs...)
-	}
-}
-
-// GetContainer resolves and returns the corresponding container.
+// GetContainer resolves and returns the container instance declared on current containerBuilder.
 func (c *containerBuilder) GetContainer() *container {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -322,25 +294,24 @@ func (c *containerBuilder) GetContainer() *container {
 	}
 }
 
-//GetTaggedKeys returns All keys related to a given tag. If values provided, then
-//only the keys which match with tag and value will be returned.
+// GetTaggedKeys returns all keys related to a given tag. If values provided, then only the keys which match with tag and
+// value will be returned. The resulting list will be sorted by definition's priority.
 func (c *containerBuilder) GetTaggedKeys(tag string, values []string) []string {
 	tagged := make([]Binding, 0)
-	for key, def := range c.definitions.All() {
-		d := def.(*definition)
-		tagVal, ok := d.Tags[tag]
+	for key, def := range c.definitions {
+		tagVal, ok := def.Tags[tag]
 		if !ok {
 			continue
 		}
 
 		if len(values) == 0 {
-			tagged = append(tagged, Binding{Key: key, Target: d})
+			tagged = append(tagged, Binding{Key: key, Target: def})
 			continue
 		}
 
 		for _, v := range values {
 			if v == tagVal {
-				tagged = append(tagged, Binding{Key: key, Target: d})
+				tagged = append(tagged, Binding{Key: key, Target: def})
 				break
 			}
 		}
@@ -355,4 +326,41 @@ func (c *containerBuilder) GetTaggedKeys(tag string, values []string) []string {
 		keys = append(keys, i.Key)
 	}
 	return keys
+}
+
+// Provider allows providing definitions into containerBuilder. Binding dependencies might not be available
+// yet during the call to this method.
+type Provider interface {
+	Provide(builder ContainerBuilder)
+}
+
+// ProviderFunc adapts a normal func into a Provider.
+type ProviderFunc func(ContainerBuilder)
+
+func (f ProviderFunc) Provide(b ContainerBuilder) { f(b) }
+
+// Resolver allows to resolve definitions into containerBuilder once all services definitions are available.
+type Resolver interface {
+	Resolve(builder ContainerBuilder)
+}
+
+// ResolverFunc adapts a normal func into a Resolver.
+type ResolverFunc func(ContainerBuilder)
+
+func (f ResolverFunc) Resolve(b ContainerBuilder) { f(b) }
+
+// AddProvider adds a new service provider.
+func (c *containerBuilder) AddProvider(ps []Provider) {
+	if len(ps) > 0 {
+		c.panicIfResolved()
+		c.providers = append(c.providers, ps...)
+	}
+}
+
+// AddResolver adds a new service resolver.
+func (c *containerBuilder) AddResolver(rs []Resolver) {
+	if len(rs) > 0 {
+		c.panicIfResolved()
+		c.resolvers = append(c.resolvers, rs...)
+	}
 }

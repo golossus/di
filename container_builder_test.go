@@ -13,7 +13,7 @@ func TestNewContainerBuilder_ReturnsInitialised(t *testing.T) {
 	b := NewContainerBuilder()
 	assert.NotNil(t, b.definitions)
 	assert.NotNil(t, b.providers)
-	assert.Len(t, b.definitions.All(), 0)
+	assert.Len(t, b.definitions, 0)
 	assert.Len(t, b.providers, 0)
 	assert.False(t, b.resolved)
 }

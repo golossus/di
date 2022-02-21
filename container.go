@@ -69,8 +69,8 @@ func (c *container) GetTaggedBy(tag string, values ...string) []interface{} {
 // true as parameter, singleton services instances will be preserved. On the contrary, any service
 // will be removed to have a fresh container.
 func (c *container) MustBuild(dry bool) {
-	for k, d := range c.builder.definitions.All() {
-		if d.(*definition).Private {
+	for k, d := range c.builder.definitions {
+		if d.Private {
 			continue
 		}
 		_ = c.Get(k)
