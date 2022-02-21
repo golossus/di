@@ -265,7 +265,7 @@ func (c *containerBuilder) HasDefinition(key string) bool {
 
 // GetDefinition retrieves a container definition for the given key or nil if not found.
 func (c *containerBuilder) GetDefinition(key string) *definition {
-	def, _ := c.definitions[key]
+	def := c.definitions[key]
 	return def
 }
 
