@@ -269,31 +269,6 @@ func (c *containerBuilder) GetDefinition(key string) *definition {
 	return def
 }
 
-// GetContainer resolves and returns the container instance declared on current containerBuilder.
-func (c *containerBuilder) GetContainer() *container {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	if !c.resolved {
-		for _, p := range c.providers {
-			p.Provide(c)
-		}
-
-		for _, r := range c.resolvers {
-			r.Resolve(c)
-		}
-
-		c.resolved = true
-	}
-
-	return &container{
-		builder:   c,
-		instances: newItemHash(),
-		sealed:    true,
-		lock:      &sync.Mutex{},
-	}
-}
-
 // GetTaggedKeys returns all keys related to a given tag. If values provided, then only the keys which match with tag and
 // value will be returned. The resulting list will be sorted by definition's priority.
 func (c *containerBuilder) GetTaggedKeys(tag string, values []string) []string {
@@ -364,3 +339,30 @@ func (c *containerBuilder) AddResolver(rs []Resolver) {
 		c.resolvers = append(c.resolvers, rs...)
 	}
 }
+
+// GetContainer resolves and returns the container instance declared on current containerBuilder.
+func (c *containerBuilder) GetContainer() *container {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if !c.resolved {
+		for _, p := range c.providers {
+			p.Provide(c)
+		}
+
+		for _, r := range c.resolvers {
+			r.Resolve(c)
+		}
+
+		c.resolved = true
+	}
+
+	return &container{
+		builder:   c,
+		instances: newItemHash(),
+		sealed:    true,
+		lock:      &sync.Mutex{},
+	}
+}
+
+
