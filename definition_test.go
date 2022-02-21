@@ -80,9 +80,10 @@ func TestParseIntegerTag(t *testing.T) {
 		expected int16
 	}{
 		{"is 0 if tag is not present", map[string]string{}, 0},
-		{"is 0 if tag with empty value", map[string]string{"tag": "0"}, 0},
+		{"is 0 if tag with empty value", map[string]string{"tag": ""}, 0},
+		{"is 0 if tag value is 0", map[string]string{"tag": "0"}, 0},
 		{"is 1 if tag value is 1", map[string]string{"tag": "1"}, 1},
-		{"is -1 if tag value is -11", map[string]string{"tag": "-1"}, -1},
+		{"is -1 if tag value is -1", map[string]string{"tag": "-1"}, -1},
 	}
 
 	for _, data := range testData {
@@ -180,5 +181,33 @@ func TestNewDefinition(t *testing.T) {
 				assert.Equal(t, data.error, err.Error())
 			})
 		}
+	})
+}
+
+func TestDefinition_HasTag(t *testing.T) {
+	def, _ := newDefinition(dummyFactory, map[string]string{"exists": "abc"})
+
+	t.Run("returns true if tag exists", func(t *testing.T) {
+		assert.True(t, def.HasTag("exists"))
+	})
+
+	t.Run("returns false if tag does not exist", func(t *testing.T) {
+		assert.False(t, def.HasTag("not-exists"))
+	})
+}
+
+func TestDefinition_GetTag(t *testing.T) {
+	def, _ := newDefinition(dummyFactory, map[string]string{"exists": "abc"})
+
+	t.Run("returns tag value if exists", func(t *testing.T) {
+		assert.Equal(t, "abc",  def.GetTag("exists"))
+	})
+
+	t.Run("returns alternative if tag does not exist", func(t *testing.T) {
+		assert.Equal(t, "alternative",  def.GetTag("not-exists", "alternative"))
+	})
+
+	t.Run("returns empty string if tag does not exist and alternative not given", func(t *testing.T) {
+		assert.Equal(t, "",  def.GetTag("not-exists"))
 	})
 }
