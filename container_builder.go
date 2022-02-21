@@ -56,7 +56,7 @@ type Binding struct {
 // By default, services can be overwritten by using the same key as an existing one. Aliases can also be overwritten but
 // trying to set an alias with a key used by a real service definition will fail.
 type ContainerBuilder interface {
-	SetAll(all []Binding)
+	SetAll(all ...Binding)
 	SetValue(key string, value interface{}, tags ...map[string]string) *definition
 	SetFactory(key string, factory func(Container) interface{}, tags ...map[string]string) *definition
 	SetInjectable(key string, value interface{}, tags ...map[string]string) *definition
@@ -231,8 +231,8 @@ func (c *containerBuilder) SetAlias(key, def string, tags ...map[string]string) 
 //			return 5
 //		}},
 //		{Key: "key4", Target: "key2, Tags: map[string]string{TagValue: "", TagFactory: ""}}, 	// <- will panic
-//	})
-func (c *containerBuilder) SetAll(all []Binding) {
+//	}...)
+func (c *containerBuilder) SetAll(all ...Binding) {
 	for _, b := range all {
 		k, parsedTags := parseKey(b.Key)
 		mergedTags := mergeTags(b.Tags, parsedTags)

@@ -288,7 +288,7 @@ func TestContainerBuilder_SetAll(t *testing.T) {
 			{Key: "service2", Target: func(c Container) interface{} {
 				return c.Get("param").(int)
 			}},
-		})
+		}...)
 
 		assert.True(t, b.HasDefinition("service"))
 		assert.True(t, b.HasDefinition("injectable"))
@@ -319,9 +319,7 @@ func TestContainerBuilder_SetAll(t *testing.T) {
 		for _, data := range sharedData {
 			t.Run(data.name, func(t *testing.T) {
 				assert.PanicsWithValue(t, data.error, func() {
-					b.SetAll([]Binding{
-						{Key: data.key, Target: data.target},
-					})
+					b.SetAll(Binding{Key: data.key, Target: data.target})
 				})
 			})
 		}
@@ -330,9 +328,7 @@ func TestContainerBuilder_SetAll(t *testing.T) {
 	t.Run("panics if invalid factory", func(t *testing.T) {
 		b := NewContainerBuilder()
 		assert.Panics(t, func() {
-			b.SetAll([]Binding{
-				{Key: "#factory", Target: 1},
-			})
+			b.SetAll(Binding{Key: "#factory", Target: 1})
 		})
 	})
 }
