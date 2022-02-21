@@ -104,13 +104,18 @@ func (d *definition) HasTag(tag string) bool {
 	return ok
 }
 
-// GetTagOrDefault returns the value of a given tag or the default value in case definition doesn't have the tag.
-func (d *definition) GetTagOrDefault(tag string, def string) string {
+// GetTag returns the value of a given tag or the alternative value in case definition doesn't have the tag. If the
+// alternative value is not given, the empty string will be used by default.
+func (d *definition) GetTag(tag string, alt ...string) string {
 	if v, ok := d.Tags[tag]; ok {
 		return v
 	}
 
-	return def
+	if len(alt) > 0{
+		return alt[0]
+	}
+
+	return ""
 }
 
 // parseBoolTag looks for a given tag name in tags and returns the corresponding boolean value.
