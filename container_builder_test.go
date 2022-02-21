@@ -426,7 +426,7 @@ func TestContainerBuilder_GetContainer(t *testing.T) {
 		assert.True(t, *spyProvide)
 		assert.True(t, *spyResolve)
 		assert.Same(t, b, c.builder)
-		assert.Empty(t, c.instances.All())
+		assert.Empty(t, c.instances)
 	})
 
 	t.Run("reuses resolved builder", func(t *testing.T) {

@@ -359,7 +359,7 @@ func (c *containerBuilder) GetContainer() *container {
 
 	return &container{
 		builder:   c,
-		instances: newItemHash(),
+		instances: make(map[string]interface{}),
 		sealed:    true,
 		lock:      &sync.Mutex{},
 	}
