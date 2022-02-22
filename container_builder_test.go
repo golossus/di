@@ -369,7 +369,7 @@ func TestContainerBuilder_GetTaggedKeys(t *testing.T) {
 func TestContainerBuilder_AddProvider(t *testing.T) {
 	t.Run("adds providers", func(t *testing.T) {
 		b := NewContainerBuilder()
-		b.AddProvider([]Provider{dummyProvider, dummyProvider})
+		b.AddProvider(dummyProvider, dummyProvider)
 
 		assert.Equal(t, 2, len(b.providers))
 	})
@@ -379,7 +379,7 @@ func TestContainerBuilder_AddProvider(t *testing.T) {
 		b.GetContainer()
 
 		assert.PanicsWithValue(t, "container is resolved and new items can not be set", func() {
-			b.AddProvider([]Provider{dummyProvider, dummyProvider})
+			b.AddProvider(dummyProvider, dummyProvider)
 		})
 	})
 }
@@ -387,7 +387,7 @@ func TestContainerBuilder_AddProvider(t *testing.T) {
 func TestContainerBuilder_AddResolver(t *testing.T) {
 	t.Run("adds providers", func(t *testing.T) {
 		b := NewContainerBuilder()
-		b.AddResolver([]Resolver{dummyResolver, dummyResolver})
+		b.AddResolver(dummyResolver, dummyResolver)
 
 		assert.Equal(t, 2, len(b.resolvers))
 	})
@@ -397,7 +397,7 @@ func TestContainerBuilder_AddResolver(t *testing.T) {
 		b.GetContainer()
 
 		assert.PanicsWithValue(t, "container is resolved and new items can not be set", func() {
-			b.AddResolver([]Resolver{dummyResolver, dummyResolver})
+			b.AddResolver(dummyResolver, dummyResolver)
 		})
 	})
 }
@@ -414,8 +414,8 @@ func TestContainerBuilder_GetContainer(t *testing.T) {
 		})
 
 		b := NewContainerBuilder()
-		b.AddProvider([]Provider{p1})
-		b.AddResolver([]Resolver{p2})
+		b.AddProvider(p1)
+		b.AddResolver(p2)
 		c := b.GetContainer()
 
 		assert.True(t, b.resolved)
@@ -429,7 +429,7 @@ func TestContainerBuilder_GetContainer(t *testing.T) {
 		p1 := ProviderFunc(func(_ ContainerBuilder) {})
 
 		b := NewContainerBuilder()
-		b.AddProvider([]Provider{p1})
+		b.AddProvider(p1)
 		c1 := b.GetContainer()
 		c2 := b.GetContainer()
 
@@ -443,12 +443,12 @@ func TestContainerBuilder_GetContainer(t *testing.T) {
 		*init = 0
 
 		p := ProviderFunc(func(b ContainerBuilder) {
-			b.SetFactory("s1", func(cb Container) interface{} {
+			b.SetFactory("s1", func(Container) interface{} {
 				return false
 			})
 
 			if *init == 1 {
-				b.SetFactory("s1", func(cb Container) interface{} {
+				b.SetFactory("s1", func(Container) interface{} {
 					return true
 				})
 			}
@@ -456,7 +456,7 @@ func TestContainerBuilder_GetContainer(t *testing.T) {
 		})
 
 		b := NewContainerBuilder()
-		b.AddProvider([]Provider{p})
+		b.AddProvider(p)
 
 		for i := 0; i < 1000; i++ {
 			go func() {
@@ -464,5 +464,18 @@ func TestContainerBuilder_GetContainer(t *testing.T) {
 				assert.False(t, c.Get("s1").(bool))
 			}()
 		}
+	})
+
+	t.Run("is recursively safe", func(t *testing.T) {
+		p := ProviderFunc(func(b ContainerBuilder) {
+			b.GetContainer()
+		})
+
+		b := NewContainerBuilder()
+		b.AddProvider(p)
+
+		assert.PanicsWithValue(t, "get container reentrant call error", func() {
+			b.GetContainer()
+		})
 	})
 }

@@ -78,13 +78,7 @@ func (c *container) MustBuild(dry bool) {
 	}
 
 	if dry {
-		c = &container{
-			builder:   c.builder,
-			instances: make(map[string]interface{}),
-			sealed:    true,
-			loading:   make([]string, 0),
-			lock:      c.lock,
-		}
+		c.instances = make(map[string]interface{})
 	}
 }
 
@@ -113,12 +107,9 @@ func (c *container) unseal() *container {
 	if !c.sealed {
 		return c
 	}
+	uc := *c
+	uc.lock = &sync.Mutex{}
+	uc.sealed = false
 
-	return &container{
-		builder:   c.builder,
-		instances: c.instances,
-		sealed:    false,
-		loading:   make([]string, 0),
-		lock:      &sync.Mutex{},
-	}
+	return &uc
 }

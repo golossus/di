@@ -74,6 +74,7 @@ type containerBuilder struct {
 	providers   []Provider
 	resolvers   []Resolver
 	resolved    bool
+	reentrant   bool
 	lock        *sync.Mutex
 }
 
@@ -84,6 +85,7 @@ func NewContainerBuilder() *containerBuilder {
 		providers:   make([]Provider, 0),
 		resolvers:   make([]Resolver, 0),
 		resolved:    false,
+		reentrant:   false,
 		lock:        &sync.Mutex{},
 	}
 }
@@ -136,12 +138,13 @@ func (c *containerBuilder) SetFactory(key string, factory func(Container) interf
 // least one public member labeled with the "inject" label:
 //
 //	 type SomeType struct {
-//	 	 field string `inject:"service.to.inject.key"`
+//	 	 Field string `inject:"service.to.inject.key"`
 //	 }
 //
 // As shown in the example above, with the "inject" label we can configure the dependencies of the injectable service by
 // indicating the key of the required dependency. When retrieving this service by the given key, the container will
-// inject the indicated dependencies.
+// inject the indicated dependencies. Unexported members are not supported to be injected because trying to do so would
+// produce a panic setting field's value with reflection.
 func (c *containerBuilder) SetInjectable(key string, i interface{}, tags ...map[string]string) *definition {
 	t := reflect.TypeOf(i)
 	isPtr := false
@@ -325,7 +328,7 @@ type ResolverFunc func(ContainerBuilder)
 func (f ResolverFunc) Resolve(b ContainerBuilder) { f(b) }
 
 // AddProvider adds a new service provider.
-func (c *containerBuilder) AddProvider(ps []Provider) {
+func (c *containerBuilder) AddProvider(ps ...Provider) {
 	if len(ps) > 0 {
 		c.panicIfResolved()
 		c.providers = append(c.providers, ps...)
@@ -333,7 +336,7 @@ func (c *containerBuilder) AddProvider(ps []Provider) {
 }
 
 // AddResolver adds a new service resolver.
-func (c *containerBuilder) AddResolver(rs []Resolver) {
+func (c *containerBuilder) AddResolver(rs ...Resolver) {
 	if len(rs) > 0 {
 		c.panicIfResolved()
 		c.resolvers = append(c.resolvers, rs...)
@@ -342,16 +345,23 @@ func (c *containerBuilder) AddResolver(rs []Resolver) {
 
 // GetContainer resolves and returns the container instance declared on current containerBuilder.
 func (c *containerBuilder) GetContainer() *container {
+	if c.reentrant {
+		panic("get container reentrant call error")
+	}
+
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	if !c.resolved {
+		rc := *c
+		rc.reentrant = true
+		rc.lock = &sync.Mutex{}
 		for _, p := range c.providers {
-			p.Provide(c)
+			p.Provide(&rc)
 		}
 
 		for _, r := range c.resolvers {
-			r.Resolve(c)
+			r.Resolve(&rc)
 		}
 
 		c.resolved = true
@@ -361,8 +371,7 @@ func (c *containerBuilder) GetContainer() *container {
 		builder:   c,
 		instances: make(map[string]interface{}),
 		sealed:    true,
+		loading:   make([]string, 0, 10),
 		lock:      &sync.Mutex{},
 	}
 }
-
-
