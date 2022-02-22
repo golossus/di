@@ -243,6 +243,35 @@ func TestContainer_Get(t *testing.T) {
 			}()
 		}
 	})
+
+	t.Run("can build services declared on providers and resolvers", func(t *testing.T) {
+		p := ProviderFunc(func(b ContainerBuilder) {
+			b.SetFactory("public", func(cb Container) interface{} {
+				return cb.Get("public2").(int) + 1
+			})
+			b.SetFactory("public2", func(cb Container) interface{} {
+				return cb.Get("private_alias").(int) + 1
+			})
+			b.SetFactory("private #private", func(_ Container) interface{} {
+				return 1
+			})
+		})
+
+		r := ResolverFunc(func(b ContainerBuilder) {
+			if !b.HasDefinition("private_alias") {
+				b.SetAlias("private_alias #private", "private")
+			}
+		})
+
+		b := NewContainerBuilder()
+		b.AddProvider(p)
+		b.AddResolver(r)
+		c := b.GetContainer()
+
+		result := c.Get("public").(int)
+
+		assert.Equal(t, 3, result)
+	})
 }
 
 func TestContainer_GetTaggedBy(t *testing.T) {
@@ -313,7 +342,7 @@ func TestContainer_GetTaggedBy(t *testing.T) {
 	})
 }
 
-func TestContainer_MustBuild_panicsOnInvalidService(t *testing.T) {
+func TestContainer_MustBuild(t *testing.T) {
 	t.Run("panics if invalid service", func(t *testing.T) {
 		s1 := func(c Container) interface{} {
 			return c.Get("s2").(int)
